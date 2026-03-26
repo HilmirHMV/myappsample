@@ -1,7 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
 <head>
-<title>My app</title>
-<body>
-    Login form
-
-</body>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tower Ascent</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            background: #0a0a1a;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            overflow: hidden;
+            font-family: monospace;
+        }
+        canvas {
+            image-rendering: pixelated;
+            image-rendering: crisp-edges;
+            border: 3px solid #333;
+        }
+        #ui-overlay {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+            color: #fff;
+            font-family: monospace;
+            pointer-events: none;
+            z-index: 10;
+        }
+        #ui-overlay.hidden { display: none; }
+        #ui-overlay h1 { font-size: 28px; color: #ff6644; margin-bottom: 12px; text-shadow: 2px 2px #000; }
+        #ui-overlay p { font-size: 14px; color: #aaa; margin: 6px 0; }
+        #ui-overlay .blink { animation: blink 1s infinite; }
+        @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0} }
+    </style>
 </head>
+<body>
+    <canvas id="game"></canvas>
+    <div id="ui-overlay">
+        <h1>TOWER ASCENT</h1>
+        <p>Climb the endless tower!</p>
+        <p class="blink">Press ENTER or tap to start</p>
+        <p style="margin-top:16px;font-size:11px;color:#666;">Arrow keys / WASD to move &amp; jump</p>
+        <p style="font-size:11px;color:#666;">Mobile: touch left/right side to move, swipe up to jump</p>
+    </div>
+    <script src="game.js"></script>
+</body>
+</html>
