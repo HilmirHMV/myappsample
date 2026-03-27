@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Tower Ascent / Bike Dash</title>
+    <title>Bike Dash</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
@@ -41,14 +41,13 @@
 <body>
     <canvas id="game"></canvas>
     <div id="ui-overlay">
-        <h1>SELECT MODE</h1>
-        <p style="color:#ff6644;font-size:16px;">[1] TOWER ASCENT</p>
-        <p style="font-size:11px;color:#888;">Climb the endless tower</p>
-        <p style="color:#44bbff;font-size:16px;margin-top:10px;">[2] BIKE DASH</p>
-        <p style="font-size:11px;color:#888;">Ride &amp; dodge cars and fish</p>
-        <p class="blink" style="margin-top:16px;">Press 1 or 2 to start</p>
-        <p style="margin-top:10px;font-size:11px;color:#555;">Arrow keys / WASD to move</p>
+        <h1 style="color:#44bbff">BIKE DASH</h1>
+        <p>Ride &amp; dodge cars and fish!</p>
+        <p class="blink" style="margin-top:16px;">Press ENTER or tap to start</p>
+        <p style="margin-top:10px;font-size:11px;color:#555;">Left/Right: switch lanes | Up/Down: move</p>
+        <p style="font-size:11px;color:#555;">Collect chocolate for invulnerability!</p>
     </div>
     <script src="game.js"></script>
+    <script src="bike.js"></script>
 </body>
 </html>
