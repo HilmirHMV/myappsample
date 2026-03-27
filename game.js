@@ -1,4 +1,4 @@
-// ── Shared Game Engine ──
+// ── Bike Dash ── Game Engine ──
 
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
@@ -22,12 +22,11 @@ const bctx = buf.getContext('2d');
 bctx.imageSmoothingEnabled = false;
 
 // ── Game state ──
-let gameMode = 'tower'; // 'tower' | 'bike'
-let state = 'title';    // title | playing | dead
+let state = 'title'; // title | playing | dead
 let score = 0;
 let particles = [];
 let screenShake = 0;
-let invulnTimer = 0; // shared invulnerability timer (frames)
+let invulnTimer = 0;
 
 // ── Seeded RNG ──
 const seededRandom = (function() {
@@ -45,12 +44,8 @@ let touchLeft = false, touchRight = false, touchJump = false;
 
 document.addEventListener('keydown', e => {
     keys[e.code] = true;
-    if (state === 'title') {
-        if (e.code === 'Digit1' || e.code === 'Numpad1') { gameMode = 'tower'; startGame(); }
-        else if (e.code === 'Digit2' || e.code === 'Numpad2') { gameMode = 'bike'; startGame(); }
-    } else if (state === 'dead') {
+    if (state === 'title' || state === 'dead') {
         if (e.code === 'Enter' || e.code === 'Space') startGame();
-        else if (e.code === 'Escape') showModeSelect();
     }
 });
 document.addEventListener('keyup', e => { keys[e.code] = false; });
@@ -60,12 +55,7 @@ canvas.addEventListener('touchstart', e => {
     for (const t of e.changedTouches) {
         const rect = canvas.getBoundingClientRect();
         const x = t.clientX - rect.left;
-        const y = t.clientY - rect.top;
-        if (state === 'title') {
-            if (y < rect.height / 2) { gameMode = 'tower'; } else { gameMode = 'bike'; }
-            startGame(); return;
-        }
-        if (state === 'dead') { startGame(); return; }
+        if (state === 'title' || state === 'dead') { startGame(); return; }
         if (x < rect.width / 3) touchLeft = true;
         else if (x > rect.width * 2 / 3) touchRight = true;
         else touchJump = true;
@@ -76,7 +66,7 @@ canvas.addEventListener('touchend', e => {
     touchLeft = false; touchRight = false; touchJump = false;
 });
 canvas.addEventListener('click', () => {
-    if (state === 'dead') startGame();
+    if (state === 'title' || state === 'dead') startGame();
 });
 
 // ── Helpers ──
@@ -93,19 +83,12 @@ function inputDir() {
     if (keys['ArrowRight'] || keys['KeyD'] || touchRight) dx += 1;
     return dx;
 }
-function jumpPressed() {
-    return keys['ArrowUp'] || keys['KeyW'] || keys['Space'] || touchJump;
-}
 
 // ── Color palette (8-bit style) ──
 const PAL = {
-    bg1: '#0a0a2e', bg2: '#0f0f3a', bg3: '#161650',
-    wall1: '#7bc8f0', wall2: '#8ed4f8', wallDk: '#5aaadd',
-    wallHi: '#a8e0ff', chain: '#ffffff', chainShadow: '#d0e8f4',
-    platform: '#6a8a5a', platformHi: '#8ab87a', platformDk: '#4a6a3a',
     fishBody: '#4488cc', fishFin: '#3366aa', fishTail: '#3366aa',
     fishEye: '#ffffff', fishPupil: '#111111', fishBelly: '#88ccee',
-    choco: '#5c3317', chocoHi: '#7a4a2a', chocoWrap: '#cc2244', chocoWrapHi: '#ee4466',
+    choco: '#5c3317', chocoHi: '#7a4a2a',
     hair: '#dd3322', hairHi: '#ff5544',
     skin: '#ffcc99', skinDk: '#dd9966',
     shirt: '#2a2a3a', shirtHi: '#3a3a4e',
@@ -140,7 +123,7 @@ function decayScreenShake() {
     if (screenShake < 0.5) screenShake = 0;
 }
 
-// ── Drawing primitives (pixel art) ──
+// ── Drawing primitives ──
 function drawRect(x, y, w, h, color) {
     bctx.fillStyle = color;
     bctx.fillRect(Math.round(x), Math.round(y), w, h);
@@ -151,7 +134,7 @@ function drawPixel(x, y, color) {
     bctx.fillRect(Math.round(x), Math.round(y), 1, 1);
 }
 
-// ── Draw chocolate bar (shared by both modes) ──
+// ── Draw chocolate bar ──
 function drawChocolate(c, camY) {
     if (c.collected) return;
     const sy = c.y - camY;
@@ -183,7 +166,7 @@ function drawChocolate(c, camY) {
     drawPixel(x + 1 + glint * 3, y + 1, '#aa7a56');
 }
 
-// ── Draw fish (shared by both modes) ──
+// ── Draw fish ──
 function drawFish(x, y, facingRight, tailWag) {
     if (facingRight) {
         drawRect(x + 2, y, 6, 6, PAL.fishBody);
@@ -231,21 +214,6 @@ function blitToScreen() {
     ctx.drawImage(buf, 0, 0, W, H, 0, 0, canvas.width, canvas.height);
 }
 
-// ── Mode select ──
-function showModeSelect() {
-    state = 'title';
-    overlay.innerHTML = `
-        <h1>SELECT MODE</h1>
-        <p style="color:#ff6644;font-size:16px;">[1] TOWER ASCENT</p>
-        <p style="font-size:11px;color:#888;">Climb the endless tower</p>
-        <p style="color:#44bbff;font-size:16px;margin-top:10px;">[2] BIKE DASH</p>
-        <p style="font-size:11px;color:#888;">Ride &amp; dodge cars and fish</p>
-        <p class="blink" style="margin-top:16px;">Press 1 or 2 to start</p>
-        <p style="margin-top:10px;font-size:11px;color:#555;">Arrow keys / WASD to move</p>
-    `;
-    overlay.classList.remove('hidden');
-}
-
 // ── Start / Reset ──
 function startGame() {
     state = 'playing';
@@ -255,25 +223,15 @@ function startGame() {
     score = 0;
     screenShake = 0;
     invulnTimer = 0;
-
-    if (gameMode === 'tower') {
-        startTowerMode();
-    } else {
-        startBikeMode();
-    }
+    startBikeMode();
 }
 
 // ── Main game loop ──
 function gameLoop() {
-    if (gameMode === 'bike' && state === 'playing') {
+    if (state === 'playing') {
         updateBike();
-        renderBike();
-    } else if (gameMode === 'bike' && (state === 'dead' || state === 'title')) {
-        renderBike();
-    } else {
-        updateTower();
-        renderTower();
     }
+    renderBike();
     requestAnimationFrame(gameLoop);
 }
 
