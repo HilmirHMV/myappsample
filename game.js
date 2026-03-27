@@ -45,7 +45,7 @@ let touchLeft = false, touchRight = false, touchJump = false;
 document.addEventListener('keydown', e => {
     keys[e.code] = true;
     if (state === 'title' || state === 'dead') {
-        if (e.code === 'Enter' || e.code === 'Space') startGame();
+        startGame();
     }
 });
 document.addEventListener('keyup', e => { keys[e.code] = false; });
@@ -65,7 +65,7 @@ canvas.addEventListener('touchend', e => {
     e.preventDefault();
     touchLeft = false; touchRight = false; touchJump = false;
 });
-canvas.addEventListener('click', () => {
+document.addEventListener('click', () => {
     if (state === 'title' || state === 'dead') startGame();
 });
 
