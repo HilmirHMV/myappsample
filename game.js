@@ -79,7 +79,8 @@ const player = {
     coyoteTimer: 0, jumpBufferTimer: 0,
     facing: 1, animFrame: 0, animTimer: 0,
     alive: true, deathTimer: 0,
-    hasDoubleJump: true, usedWallJump: false
+    hasDoubleJump: true, usedWallJump: false,
+    jumpHeld: false
 };
 
 // ── Input ──
@@ -167,16 +168,22 @@ function generatePlatformsUpTo(targetY) {
             });
         }
 
-        // Occasional spike hazard
+        // Occasional fish hazard with varied movement patterns
         if (seededRandom() < 0.12 && platforms.length > 5) {
             const sx = rngInt(3, COLS - 4) * TILE;
-            const swimDir = seededRandom() < 0.5 ? 1 : -1;
-            const swimSpeed = rng(0.3, 0.7);
+            const sy = nextPlatformY + 2;
+            const patterns = ['sine', 'circle', 'dash', 'zigzag', 'figure8'];
+            const pattern = patterns[Math.floor(seededRandom() * patterns.length)];
             hazards.push({
-                x: sx, y: nextPlatformY + 2, w: 10, h: 6,
-                originX: sx, swimDir, swimSpeed,
-                swimRange: rng(20, 45), swimTimer: rng(0, 100),
-                bobTimer: rng(0, 100)
+                x: sx, y: sy, w: 10, h: 6,
+                originX: sx, originY: sy,
+                pattern,
+                speed: rng(0.3, 0.8),
+                range: rng(20, 50),
+                timer: rng(0, 100),
+                dashDir: seededRandom() < 0.5 ? 1 : -1,
+                dashCooldown: 0,
+                prevX: sx
             });
         }
     }
@@ -487,11 +494,11 @@ function drawHazard(h, camY) {
     const sy = h.y - camY;
     const x = Math.round(h.x);
     const y = Math.round(sy);
-    // Determine facing direction from swim velocity
-    const vel = Math.cos(h.swimTimer * h.swimSpeed);
-    const facingRight = vel >= 0;
-    // Tail wag animation
-    const tailWag = Math.sin(h.bobTimer * 3) > 0 ? 1 : 0;
+    // Determine facing direction from actual movement delta
+    const facingRight = h.x >= h.prevX;
+    // Tail wag animation (faster during dash)
+    const wagSpeed = h.pattern === 'dash' && h.dashCooldown > 0 ? 8 : 3;
+    const tailWag = Math.sin(h.timer * wagSpeed) > 0 ? 1 : 0;
 
     if (facingRight) {
         // Fish facing right
@@ -608,10 +615,15 @@ function update() {
         p.animFrame = 0; p.animTimer = 0;
     }
 
+    // Track fresh jump presses (must release and re-press for double jump)
+    const jp = jumpPressed();
+    const freshJumpPress = jp && !p.jumpHeld;
+    p.jumpHeld = jp;
+
     // Jump buffering
-    if (jumpPressed()) {
+    if (freshJumpPress) {
         p.jumpBufferTimer = JUMP_BUFFER;
-    } else {
+    } else if (!jp) {
         p.jumpBufferTimer = Math.max(0, p.jumpBufferTimer - 1);
     }
 
@@ -640,10 +652,10 @@ function update() {
         p.jumpBufferTimer = 0;
         p.wallSliding = false;
         p.usedWallJump = true;
-        p.hasDoubleJump = true; // wall jump restores double jump
+        p.hasDoubleJump = true;
         spawnParticles(p.x + (p.wallDir > 0 ? 8 : 0), p.y + 4, '#ddd', 5, 2);
     }
-    // Double jump (once per airborne period)
+    // Double jump (requires fresh press while airborne)
     else if (p.jumpBufferTimer > 0 && !p.grounded && p.hasDoubleJump && p.coyoteTimer <= 0) {
         p.vy = JUMP_FORCE * 0.85;
         p.jumpBufferTimer = 0;
@@ -721,13 +733,55 @@ function update() {
         }
     }
 
-    // Update & collide hazards (swimming fish)
+    // Update & collide hazards (swimming fish with varied patterns)
     for (const h of hazards) {
-        h.swimTimer += 0.02;
-        h.bobTimer += 0.04;
-        h.x = h.originX + Math.sin(h.swimTimer * h.swimSpeed) * h.swimRange;
+        h.prevX = h.x;
+        h.timer += 0.02;
+        const t = h.timer * h.speed;
+
+        switch (h.pattern) {
+            case 'sine':
+                // Classic back-and-forth swim
+                h.x = h.originX + Math.sin(t) * h.range;
+                h.y = h.originY + Math.sin(t * 2.5) * 4;
+                break;
+            case 'circle':
+                // Swim in a circle/oval
+                h.x = h.originX + Math.cos(t) * h.range * 0.7;
+                h.y = h.originY + Math.sin(t) * 15;
+                break;
+            case 'dash':
+                // Slow drift then sudden dash in one direction, reverse
+                h.dashCooldown -= 0.02;
+                if (h.dashCooldown <= 0) {
+                    h.x += h.dashDir * 0.3;
+                    // Dash when timer triggers
+                    if (Math.sin(t * 1.5) > 0.95) {
+                        h.dashCooldown = 1.5;
+                        h.dashDir *= -1;
+                    }
+                } else {
+                    h.x += h.dashDir * 2.5; // fast dash
+                }
+                h.y = h.originY + Math.sin(t * 1.8) * 3;
+                break;
+            case 'zigzag':
+                // Sharp diagonal zigzag movement
+                const zigPhase = (t * 0.8) % (Math.PI * 2);
+                const zigX = zigPhase < Math.PI
+                    ? lerp(-h.range, h.range, zigPhase / Math.PI)
+                    : lerp(h.range, -h.range, (zigPhase - Math.PI) / Math.PI);
+                h.x = h.originX + zigX;
+                h.y = h.originY + Math.abs(Math.sin(zigPhase)) * 12 - 6;
+                break;
+            case 'figure8':
+                // Figure-8 / lemniscate pattern
+                h.x = h.originX + Math.sin(t) * h.range * 0.8;
+                h.y = h.originY + Math.sin(t * 2) * 10;
+                break;
+        }
+
         h.x = clamp(h.x, 14, W - 14 - h.w);
-        h.y += Math.sin(h.bobTimer) * 0.15; // gentle vertical bob
         if (aabb(p, h)) {
             killPlayer();
             return;
