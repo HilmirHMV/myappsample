@@ -107,11 +107,12 @@ function aabb(a, b) {
 // ── Color palette (8-bit style) ──
 const PAL = {
     bg1: '#0a0a2e', bg2: '#0f0f3a', bg3: '#161650',
-    brick1: '#4a3a2a', brick2: '#5c4a38', brick3: '#3a2a1a',
-    brickHi: '#6e5a46',
+    wall1: '#7bc8f0', wall2: '#8ed4f8', wallDk: '#5aaadd',
+    wallHi: '#a8e0ff', chain: '#ffffff', chainShadow: '#d0e8f4',
     platform: '#6a8a5a', platformHi: '#8ab87a', platformDk: '#4a6a3a',
-    spike: '#cc3333',
-    coin: '#ffcc00', coinHi: '#ffee66',
+    fishBody: '#4488cc', fishFin: '#3366aa', fishTail: '#3366aa',
+    fishEye: '#ffffff', fishPupil: '#111111', fishBelly: '#88ccee',
+    choco: '#5c3317', chocoHi: '#7a4a2a', chocoWrap: '#cc2244', chocoWrapHi: '#ee4466',
     hair: '#dd3322', hairHi: '#ff5544',
     skin: '#ffcc99', skinDk: '#dd9966',
     shirt: '#2a2a3a', shirtHi: '#3a3a4e',
@@ -285,50 +286,99 @@ function drawPlayer(px, py) {
     }
 }
 
+// ── Draw chain-link inverted S decoration ──
+// Draws an inverted S shape made of solid chain links on the wall
+function drawChainS(bx, by, flipped) {
+    const c = PAL.chain;
+    const s = PAL.chainShadow;
+    // Each "link" is a 2x2 block with a shadow pixel
+    // Inverted S shape (mirrored S): curves right at top, left at bottom
+    //  Pattern (8 wide x 14 tall):
+    //   ##__##    top-right curve
+    //   ####      connects
+    //   ##        left column
+    //     ##      middle
+    //       ##    right column
+    //   ####      connects
+    //   ##__##    bottom-left curve (inverted)
+
+    const links = flipped ? [
+        [0,0],[2,0],[4,0],         // top row
+        [0,2],[2,2],               // second row curves left
+        [0,4],                     // descend left
+        [0,6],[2,6],               // cross middle
+        [4,6],                     // go right
+        [4,8],[2,8],               // curve back
+        [0,10],[2,10],[4,10],      // bottom row
+    ] : [
+        [0,0],[2,0],[4,0],         // top row
+        [4,2],[2,2],               // second row curves right
+        [4,4],                     // descend right
+        [4,6],[2,6],               // cross middle
+        [0,6],                     // go left
+        [0,8],[2,8],               // curve back
+        [0,10],[2,10],[4,10],      // bottom row
+    ];
+
+    for (const [lx, ly] of links) {
+        drawRect(bx + lx, by + ly, 2, 2, c);
+        // Shadow on bottom-right of each link
+        drawPixel(bx + lx + 1, by + ly + 1, s);
+    }
+}
+
 // ── Draw tower background ──
 function drawBackground(camY) {
     // Dark gradient sky
     bctx.fillStyle = PAL.bg1;
     bctx.fillRect(0, 0, W, H);
 
-    // Parallax brick walls on sides
+    // Light blue walls on sides
     const wallW = 12;
-    const brickH = 8;
-    const brickW = 6;
-    const offsetY = (camY * 0.3) % brickH;
+    const tileH = 8;
+    const tileW = 6;
+    const offsetY = (camY * 0.3) % tileH;
 
     for (let side = 0; side < 2; side++) {
         const baseX = side === 0 ? 0 : W - wallW;
-        for (let row = -1; row < H / brickH + 1; row++) {
-            const by = row * brickH + offsetY;
+
+        // Fill wall with light blue base
+        bctx.fillStyle = PAL.wall1;
+        bctx.fillRect(baseX, 0, wallW, H);
+
+        // Tile pattern for texture
+        for (let row = -1; row < H / tileH + 2; row++) {
+            const ty = row * tileH + offsetY;
             const stagger = (row % 2) * 3;
-            for (let col = 0; col < Math.ceil(wallW / brickW) + 1; col++) {
-                const bx = baseX + col * brickW + stagger;
-                const c = (row + col) % 3 === 0 ? PAL.brick2 : PAL.brick1;
-                drawRect(bx, by, brickW - 1, brickH - 1, c);
-                // Brick highlight (top edge)
-                drawRect(bx, by, brickW - 1, 1, PAL.brickHi);
+            for (let col = 0; col < Math.ceil(wallW / tileW) + 1; col++) {
+                const tx = baseX + col * tileW + stagger;
+                const c = (row + col) % 3 === 0 ? PAL.wall2 : PAL.wall1;
+                drawRect(tx, ty, tileW - 1, tileH - 1, c);
+                // Light highlight on top edge
+                drawRect(tx, ty, tileW - 1, 1, PAL.wallHi);
+                // Subtle darker bottom edge
+                drawRect(tx, ty + tileH - 2, tileW - 1, 1, PAL.wallDk);
             }
         }
     }
 
-    // Background details - distant windows
-    const winOffsetY = (camY * 0.15) % 40;
-    for (let wy = -1; wy < H / 40 + 1; wy++) {
-        const winY = wy * 40 + winOffsetY;
-        // Left wall window
-        drawRect(3, winY + 10, 4, 6, '#1a1a3a');
-        drawPixel(4, winY + 11, '#334');
-        // Right wall window
-        drawRect(W - 8, winY + 25, 4, 6, '#1a1a3a');
-        drawPixel(W - 7, winY + 26, '#334');
+    // Chain-link inverted S decorations on walls (repeating pattern)
+    const chainPatternH = 20;  // vertical repeat distance
+    const chainOffsetY = ((camY * 0.3) % chainPatternH + chainPatternH) % chainPatternH;
+
+    for (let row = -2; row < H / chainPatternH + 2; row++) {
+        const cy = row * chainPatternH + chainOffsetY;
+        // Left wall: chain S decoration centered
+        drawChainS(2, cy, false);
+        // Right wall: mirrored chain S decoration
+        drawChainS(W - 10, cy, true);
     }
 
-    // Subtle tower interior gradient
+    // Subtle tower interior gradient (dark edges for depth)
     const grad = bctx.createLinearGradient(wallW, 0, W - wallW, 0);
-    grad.addColorStop(0, 'rgba(10,10,30,0.3)');
+    grad.addColorStop(0, 'rgba(10,10,30,0.25)');
     grad.addColorStop(0.5, 'rgba(10,10,30,0)');
-    grad.addColorStop(1, 'rgba(10,10,30,0.3)');
+    grad.addColorStop(1, 'rgba(10,10,30,0.25)');
     bctx.fillStyle = grad;
     bctx.fillRect(wallW, 0, W - wallW * 2, H);
 }
@@ -353,27 +403,54 @@ function drawPlatform(p, camY) {
     }
 }
 
-// ── Draw coin ──
+// ── Draw chocolate ──
 function drawCoin(c, camY) {
     if (c.collected) return;
     const sy = c.y - camY;
     const bob = Math.sin(c.animTimer * 0.08) * 2;
-    drawRect(c.x + 1, sy + bob, 4, 6, PAL.coin);
-    drawRect(c.x, sy + bob + 1, 6, 4, PAL.coin);
-    drawPixel(c.x + 1, sy + bob + 1, PAL.coinHi);
-    drawPixel(c.x + 2, sy + bob, PAL.coinHi);
+    const x = Math.round(c.x);
+    const y = Math.round(sy + bob);
+    // Wrapper (red/pink foil)
+    drawRect(x, y + 1, 6, 4, PAL.chocoWrap);
+    drawRect(x + 1, y, 4, 6, PAL.chocoWrap);
+    // Wrapper highlight
+    drawPixel(x + 1, y + 1, PAL.chocoWrapHi);
+    drawPixel(x + 2, y, PAL.chocoWrapHi);
+    // Exposed chocolate (center)
+    drawRect(x + 1, y + 2, 4, 2, PAL.choco);
+    // Chocolate highlight
+    drawPixel(x + 2, y + 2, PAL.chocoHi);
+    // Wrapper twist ends
+    drawPixel(x - 1, y + 2, PAL.chocoWrap);
+    drawPixel(x - 1, y + 3, PAL.chocoWrap);
+    drawPixel(x + 6, y + 2, PAL.chocoWrap);
+    drawPixel(x + 6, y + 3, PAL.chocoWrap);
 }
 
-// ── Draw hazard (spike) ──
+// ── Draw hazard (fish) ──
 function drawHazard(h, camY) {
     const sy = h.y - camY;
-    // Triangle spike
-    bctx.fillStyle = PAL.spike;
-    bctx.beginPath();
-    bctx.moveTo(h.x, sy + h.h);
-    bctx.lineTo(h.x + h.w / 2, sy);
-    bctx.lineTo(h.x + h.w, sy + h.h);
-    bctx.fill();
+    const x = Math.round(h.x);
+    const y = Math.round(sy);
+    // Fish body (oval-ish)
+    drawRect(x + 2, y, 4, 6, PAL.fishBody);
+    drawRect(x + 1, y + 1, 6, 4, PAL.fishBody);
+    // Belly (lighter underside)
+    drawRect(x + 2, y + 3, 4, 2, PAL.fishBelly);
+    drawRect(x + 1, y + 4, 6, 1, PAL.fishBelly);
+    // Tail fin (left side)
+    drawRect(x - 1, y + 1, 2, 4, PAL.fishTail);
+    drawPixel(x - 2, y + 2, PAL.fishTail);
+    drawPixel(x - 2, y + 3, PAL.fishTail);
+    // Dorsal fin (top)
+    drawPixel(x + 4, y - 1, PAL.fishFin);
+    drawPixel(x + 5, y - 1, PAL.fishFin);
+    drawPixel(x + 5, y, PAL.fishFin);
+    // Eye
+    drawPixel(x + 5, y + 2, PAL.fishEye);
+    drawPixel(x + 6, y + 2, PAL.fishPupil);
+    // Mouth
+    drawPixel(x + 7, y + 3, PAL.fishBody);
 }
 
 // ── Draw HUD ──
@@ -535,7 +612,7 @@ function update() {
         if (!c.collected && aabb(p, c)) {
             c.collected = true;
             score += 25;
-            spawnParticles(c.x + 3, c.y + 3, PAL.coin, 8, 3);
+            spawnParticles(c.x + 3, c.y + 3, PAL.choco, 8, 3);
         }
     }
 
