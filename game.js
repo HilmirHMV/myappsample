@@ -40,6 +40,23 @@ let hazards = [];
 let coins = [];
 let deathY = 0;
 let floorHeight = 0;
+let towerLevel = 0;
+let levelFlash = 0;
+
+// ── Level color themes ── each level shifts the tower's look ──
+const LEVEL_THEMES = [
+    { bg: '#0a0a2e', wall1: '#7bc8f0', wall2: '#8ed4f8', wallDk: '#5aaadd', wallHi: '#a8e0ff', chain: '#ffffff', chainSh: '#d0e8f4', platCol: '#6a8a5a', platHi: '#8ab87a', platDk: '#4a6a3a', name: 'ICE TOWER' },
+    { bg: '#1a0a2e', wall1: '#c88af0', wall2: '#d8a4f8', wallDk: '#a06add', wallHi: '#e8c0ff', chain: '#ffe8ff', chainSh: '#d8b0e8', platCol: '#8a6a8a', platHi: '#b88ab8', platDk: '#6a4a6a', name: 'PURPLE SPIRE' },
+    { bg: '#2e1a0a', wall1: '#f0b868', wall2: '#f8cc88', wallDk: '#d09040', wallHi: '#ffe0a8', chain: '#ffffff', chainSh: '#f0d8b0', platCol: '#8a7a5a', platHi: '#b8a87a', platDk: '#6a5a3a', name: 'GOLDEN KEEP' },
+    { bg: '#0a2e1a', wall1: '#68d888', wall2: '#88e8a8', wallDk: '#40b060', wallHi: '#a8ffc8', chain: '#e8ffe8', chainSh: '#b0e8c0', platCol: '#5a8a6a', platHi: '#7ab88a', platDk: '#3a6a4a', name: 'EMERALD SHAFT' },
+    { bg: '#2e0a0a', wall1: '#f07868', wall2: '#f89888', wallDk: '#d05040', wallHi: '#ffc0a8', chain: '#ffe8e0', chainSh: '#e8c0b0', platCol: '#8a5a5a', platHi: '#b87a7a', platDk: '#6a3a3a', name: 'CRIMSON PILLAR' },
+    { bg: '#0a1a2e', wall1: '#68a8f0', wall2: '#88c0f8', wallDk: '#4080d0', wallHi: '#a8d8ff', chain: '#e0f0ff', chainSh: '#b0d0e8', platCol: '#5a6a8a', platHi: '#7a8ab8', platDk: '#3a4a6a', name: 'AZURE ASCENT' },
+    { bg: '#2e2e0a', wall1: '#e0e068', wall2: '#e8e888', wallDk: '#c0c040', wallHi: '#ffffa8', chain: '#fffff0', chainSh: '#e8e8b0', platCol: '#7a8a5a', platHi: '#a8b87a', platDk: '#5a6a3a', name: 'SOLAR PINNACLE' },
+];
+
+function getCurrentTheme() {
+    return LEVEL_THEMES[towerLevel % LEVEL_THEMES.length];
+}
 
 // ── Procedural generation ──
 let nextPlatformY = 0;
@@ -61,7 +78,8 @@ const player = {
     grounded: false, wallSliding: false, wallDir: 0,
     coyoteTimer: 0, jumpBufferTimer: 0,
     facing: 1, animFrame: 0, animTimer: 0,
-    alive: true, deathTimer: 0
+    alive: true, deathTimer: 0,
+    hasDoubleJump: true, usedWallJump: false
 };
 
 // ── Input ──
@@ -181,6 +199,8 @@ function startGame() {
     particles = [];
     score = 0;
     screenShake = 0;
+    towerLevel = 0;
+    levelFlash = 0;
     nextPlatformY = H - TILE * 3;
 
     // Ground floor
@@ -196,6 +216,7 @@ function startGame() {
     player.grounded = false; player.wallSliding = false;
     player.alive = true; player.deathTimer = 0;
     player.facing = 1; player.coyoteTimer = 0; player.jumpBufferTimer = 0;
+    player.hasDoubleJump = true; player.usedWallJump = false;
 
     camera.y = player.y - H / 2;
     deathY = camera.y + H + 40;
@@ -336,11 +357,13 @@ function drawChainS(bx, by, flipped) {
 
 // ── Draw tower background ──
 function drawBackground(camY) {
-    // Dark gradient sky
-    bctx.fillStyle = PAL.bg1;
+    const theme = getCurrentTheme();
+
+    // Dark gradient sky (themed)
+    bctx.fillStyle = theme.bg;
     bctx.fillRect(0, 0, W, H);
 
-    // Light blue walls on sides
+    // Themed walls on sides
     const wallW = 12;
     const tileH = 8;
     const tileW = 6;
@@ -349,8 +372,8 @@ function drawBackground(camY) {
     for (let side = 0; side < 2; side++) {
         const baseX = side === 0 ? 0 : W - wallW;
 
-        // Fill wall with light blue base
-        bctx.fillStyle = PAL.wall1;
+        // Fill wall with themed base
+        bctx.fillStyle = theme.wall1;
         bctx.fillRect(baseX, 0, wallW, H);
 
         // Tile pattern for texture
@@ -359,29 +382,33 @@ function drawBackground(camY) {
             const stagger = (row % 2) * 3;
             for (let col = 0; col < Math.ceil(wallW / tileW) + 1; col++) {
                 const tx = baseX + col * tileW + stagger;
-                const c = (row + col) % 3 === 0 ? PAL.wall2 : PAL.wall1;
+                const c = (row + col) % 3 === 0 ? theme.wall2 : theme.wall1;
                 drawRect(tx, ty, tileW - 1, tileH - 1, c);
-                // Light highlight on top edge
-                drawRect(tx, ty, tileW - 1, 1, PAL.wallHi);
-                // Subtle darker bottom edge
-                drawRect(tx, ty + tileH - 2, tileW - 1, 1, PAL.wallDk);
+                drawRect(tx, ty, tileW - 1, 1, theme.wallHi);
+                drawRect(tx, ty + tileH - 2, tileW - 1, 1, theme.wallDk);
             }
         }
     }
 
-    // Chain-link inverted S decorations on walls (repeating pattern)
-    const chainPatternH = 20;  // vertical repeat distance
+    // Chain-link inverted S decorations (themed color)
+    const chainPatternH = 20;
     const chainOffsetY = ((camY * 0.3) % chainPatternH + chainPatternH) % chainPatternH;
+    // Temporarily override chain colors to theme
+    const origChain = PAL.chain;
+    const origChainShadow = PAL.chainShadow;
+    PAL.chain = theme.chain;
+    PAL.chainShadow = theme.chainSh;
 
     for (let row = -2; row < H / chainPatternH + 2; row++) {
         const cy = row * chainPatternH + chainOffsetY;
-        // Left wall: chain S decoration centered
         drawChainS(2, cy, false);
-        // Right wall: mirrored chain S decoration
         drawChainS(W - 10, cy, true);
     }
 
-    // Subtle tower interior gradient (dark edges for depth)
+    PAL.chain = origChain;
+    PAL.chainShadow = origChainShadow;
+
+    // Subtle tower interior gradient
     const grad = bctx.createLinearGradient(wallW, 0, W - wallW, 0);
     grad.addColorStop(0, 'rgba(10,10,30,0.25)');
     grad.addColorStop(0.5, 'rgba(10,10,30,0)');
@@ -394,19 +421,16 @@ function drawBackground(camY) {
 function drawPlatform(p, camY) {
     const sy = p.y - camY;
     const tiles = p.w / TILE;
+    const theme = getCurrentTheme();
     for (let i = 0; i < tiles; i++) {
         const tx = p.x + i * TILE;
-        drawRect(tx, sy, TILE, TILE, PAL.platform);
-        // Top highlight
-        drawRect(tx, sy, TILE, 1, PAL.platformHi);
-        // Bottom shadow
-        drawRect(tx, sy + TILE - 1, TILE, 1, PAL.platformDk);
-        // Side edges
-        if (i === 0) drawRect(tx, sy, 1, TILE, PAL.platformDk);
-        if (i === tiles - 1) drawRect(tx + TILE - 1, sy, 1, TILE, PAL.platformDk);
-        // Interior pixel detail
-        drawPixel(tx + 2, sy + 3, PAL.platformDk);
-        drawPixel(tx + 5, sy + 5, PAL.platformDk);
+        drawRect(tx, sy, TILE, TILE, theme.platCol);
+        drawRect(tx, sy, TILE, 1, theme.platHi);
+        drawRect(tx, sy + TILE - 1, TILE, 1, theme.platDk);
+        if (i === 0) drawRect(tx, sy, 1, TILE, theme.platDk);
+        if (i === tiles - 1) drawRect(tx + TILE - 1, sy, 1, TILE, theme.platDk);
+        drawPixel(tx + 2, sy + 3, theme.platDk);
+        drawPixel(tx + 5, sy + 5, theme.platDk);
     }
 }
 
@@ -418,57 +442,44 @@ function drawCoin(c, camY) {
     const x = Math.round(c.x);
     const y = Math.round(sy + bob);
 
-    // Gold foil wrapper (peeled back at top-right)
-    // Back foil layer (gold, slightly visible behind bar)
-    drawRect(x, y, 10, 8, '#c8a420');       // base gold foil
-    drawRect(x, y, 10, 1, '#ddb830');       // foil top highlight
-    drawRect(x, y + 7, 10, 1, '#a08018');   // foil bottom shadow
-    drawPixel(x, y, '#ddb830');             // corner highlight
-    drawPixel(x + 9, y + 7, '#8a6a10');     // corner shadow
+    // Bare chocolate bar — rich brown with segments and glossy sheen
+    // Outer edge (slightly darker border, gives shape)
+    drawRect(x, y, 10, 8, '#3a1a08');
 
-    // Foil folded-back flap (top-right, peeled open to reveal chocolate)
-    drawRect(x + 7, y - 1, 3, 2, '#ddb830');
-    drawPixel(x + 7, y - 1, '#e8cc44');
-    drawPixel(x + 9, y, '#c8a420');
+    // Main chocolate body
+    drawRect(x + 1, y + 1, 8, 6, '#5c3317');
 
-    // Chocolate bar body (exposed from wrapper, rich brown)
-    drawRect(x + 1, y + 1, 8, 6, '#5c3317');   // dark chocolate base
-    drawRect(x + 1, y + 1, 8, 1, '#7a4a2a');   // top edge highlight (light catching)
+    // 2x3 segment grid (3 columns, 2 rows)
+    // Row 1 segments
+    drawRect(x + 1, y + 1, 2, 3, '#6b3d20');
+    drawRect(x + 4, y + 1, 2, 3, '#6b3d20');
+    drawRect(x + 7, y + 1, 2, 3, '#6b3d20');
+    // Row 2 segments (slightly darker = depth)
+    drawRect(x + 1, y + 4, 2, 3, '#5c3317');
+    drawRect(x + 4, y + 4, 2, 3, '#5c3317');
+    drawRect(x + 7, y + 4, 2, 3, '#5c3317');
 
-    // Chocolate bar segments (2x2 grid of squares with grooves)
-    // Top-left segment
-    drawRect(x + 1, y + 1, 4, 3, '#6b3d20');
-    drawPixel(x + 2, y + 2, '#7a4a2a');         // segment highlight
-    // Top-right segment
-    drawRect(x + 5, y + 1, 4, 3, '#6b3d20');
-    drawPixel(x + 6, y + 2, '#7a4a2a');         // segment highlight
-    // Bottom-left segment
-    drawRect(x + 1, y + 4, 4, 3, '#5c3317');
-    drawPixel(x + 2, y + 5, '#6b3d20');         // subtle highlight
-    // Bottom-right segment
-    drawRect(x + 5, y + 4, 4, 3, '#5c3317');
-    drawPixel(x + 6, y + 5, '#6b3d20');         // subtle highlight
+    // Groove lines between segments (deep dark)
+    drawRect(x + 3, y + 1, 1, 6, '#2e0e04');   // vertical groove 1
+    drawRect(x + 6, y + 1, 1, 6, '#2e0e04');   // vertical groove 2
+    drawRect(x + 1, y + 4, 8, 1, '#2e0e04');   // horizontal groove
 
-    // Segment divider grooves (darker lines between segments)
-    drawRect(x + 5, y + 1, 1, 6, '#4a2510');    // vertical groove
-    drawRect(x + 1, y + 4, 8, 1, '#4a2510');    // horizontal groove
-
-    // Top specular highlights (glossy chocolate look)
+    // Top specular highlight (glossy chocolate sheen)
+    drawPixel(x + 1, y + 1, '#8a5a36');
     drawPixel(x + 2, y + 1, '#8a5a36');
-    drawPixel(x + 3, y + 1, '#8a5a36');
-    drawPixel(x + 6, y + 1, '#8a5a36');
+    drawPixel(x + 4, y + 1, '#8a5a36');
+    drawPixel(x + 5, y + 1, '#8a5a36');
+    drawPixel(x + 7, y + 1, '#8a5a36');
+    drawPixel(x + 8, y + 1, '#8a5a36');
 
-    // Wrapper edge detail (gold foil border visible around chocolate)
-    drawPixel(x, y + 1, '#ddb830');
-    drawPixel(x, y + 6, '#c8a420');
-    drawPixel(x + 9, y + 1, '#c8a420');
-    drawPixel(x + 9, y + 6, '#a08018');
+    // Bottom edge shadow on each segment
+    drawPixel(x + 1, y + 6, '#3a1a08');
+    drawPixel(x + 4, y + 6, '#3a1a08');
+    drawPixel(x + 7, y + 6, '#3a1a08');
 
-    // Tiny shimmer animation on foil
-    const shimmer = Math.sin(c.animTimer * 0.15) > 0.5;
-    if (shimmer) {
-        drawPixel(x + 8, y - 1, '#ffe866');
-    }
+    // Subtle animated glint
+    const glint = Math.floor(c.animTimer * 0.1) % 3;
+    drawPixel(x + 1 + glint * 3, y + 1, '#aa7a56');
 }
 
 // ── Draw hazard (fish) ──
@@ -523,6 +534,7 @@ function drawHazard(h, camY) {
 
 // ── Draw HUD ──
 function drawHUD() {
+    const theme = getCurrentTheme();
     // Score
     bctx.fillStyle = '#fff';
     bctx.font = '8px monospace';
@@ -532,12 +544,25 @@ function drawHUD() {
     bctx.fillText('BEST: ' + highScore, W - 14, 10);
     bctx.textAlign = 'left';
 
-    // Height meter bar
+    // Level name
+    bctx.fillStyle = theme.wallHi;
+    bctx.textAlign = 'center';
+    bctx.fillText('LV' + (towerLevel + 1) + ' ' + theme.name, W / 2, 10);
+    bctx.textAlign = 'left';
+
+    // Level progress meter (fills toward next level-up)
     const meterH = 40;
     drawRect(W - 8, 16, 4, meterH, '#222');
-    const fill = clamp(score / 500, 0, 1);
-    const fillH = Math.floor(fill * meterH);
-    drawRect(W - 8, 16 + meterH - fillH, 4, fillH, PAL.green);
+    const progressInLevel = (score % 500) / 500;
+    const fillH = Math.floor(progressInLevel * meterH);
+    drawRect(W - 8, 16 + meterH - fillH, 4, fillH, theme.wallHi);
+
+    // Level-up flash overlay
+    if (levelFlash > 0) {
+        const alpha = levelFlash / 30;
+        bctx.fillStyle = 'rgba(255,255,255,' + (alpha * 0.5) + ')';
+        bctx.fillRect(0, 0, W, H);
+    }
 }
 
 // ── Physics / Update ──
@@ -597,23 +622,33 @@ function update() {
         p.coyoteTimer = Math.max(0, p.coyoteTimer - 1);
     }
 
-    // Jump
+    // Jump (ground / coyote)
     if (p.jumpBufferTimer > 0 && p.coyoteTimer > 0) {
         p.vy = JUMP_FORCE;
         p.coyoteTimer = 0;
         p.jumpBufferTimer = 0;
         p.grounded = false;
+        p.hasDoubleJump = true;
+        p.usedWallJump = false;
         spawnParticles(p.x + 4, p.y + p.h, '#fff', 4, 2);
     }
-
-    // Wall jump
-    if (p.jumpBufferTimer > 0 && p.wallSliding && !p.grounded) {
+    // Wall jump (once per airborne period)
+    else if (p.jumpBufferTimer > 0 && p.wallSliding && !p.grounded && !p.usedWallJump) {
         p.vy = WALL_JUMP_FORCE_Y;
         p.vx = -p.wallDir * WALL_JUMP_FORCE_X;
         p.facing = -p.wallDir;
         p.jumpBufferTimer = 0;
         p.wallSliding = false;
+        p.usedWallJump = true;
+        p.hasDoubleJump = true; // wall jump restores double jump
         spawnParticles(p.x + (p.wallDir > 0 ? 8 : 0), p.y + 4, '#ddd', 5, 2);
+    }
+    // Double jump (once per airborne period)
+    else if (p.jumpBufferTimer > 0 && !p.grounded && p.hasDoubleJump && p.coyoteTimer <= 0) {
+        p.vy = JUMP_FORCE * 0.85;
+        p.jumpBufferTimer = 0;
+        p.hasDoubleJump = false;
+        spawnParticles(p.x + 4, p.y + p.h, '#aaf', 6, 2.5);
     }
 
     // Variable jump height
@@ -665,6 +700,8 @@ function update() {
             p.y = plat.y - p.h;
             p.vy = 0;
             p.grounded = true;
+            p.hasDoubleJump = true;
+            p.usedWallJump = false;
 
             // Ride moving platform
             if (plat.type === 'moving') {
@@ -708,6 +745,16 @@ function update() {
     if (heightScore > score) score = heightScore;
     if (score > highScore) { highScore = score; localStorage.setItem('towerHighScore', highScore); }
 
+    // Level-up check: every 500 points advances the tower theme
+    const newLevel = Math.floor(score / 500);
+    if (newLevel > towerLevel) {
+        towerLevel = newLevel;
+        levelFlash = 30; // flash frames
+        screenShake = 4;
+        spawnParticles(W / 2, p.y, '#fff', 20, 5);
+        spawnParticles(W / 2, p.y, getCurrentTheme().wall1, 15, 4);
+    }
+
     // Death from falling below camera
     deathY = camera.y + H + 20;
     if (p.y > deathY) {
@@ -729,6 +776,7 @@ function update() {
     // Screen shake decay
     if (screenShake > 0) screenShake *= 0.85;
     if (screenShake < 0.5) screenShake = 0;
+    if (levelFlash > 0) levelFlash--;
 
     // Coin animation
     for (const c of coins) c.animTimer++;
