@@ -226,7 +226,7 @@ function startGame() {
     startBikeMode();
 }
 
-// ── Main game loop ──
+// ── Main game loop (started after all scripts load) ──
 function gameLoop() {
     if (state === 'playing') {
         updateBike();
@@ -234,5 +234,3 @@ function gameLoop() {
     renderBike();
     requestAnimationFrame(gameLoop);
 }
-
-gameLoop();
