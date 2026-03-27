@@ -151,8 +151,15 @@ function generatePlatformsUpTo(targetY) {
 
         // Occasional spike hazard
         if (seededRandom() < 0.12 && platforms.length > 5) {
-            const sx = rngInt(1, COLS - 2) * TILE;
-            hazards.push({ x: sx, y: nextPlatformY + 2, w: TILE, h: 6 });
+            const sx = rngInt(3, COLS - 4) * TILE;
+            const swimDir = seededRandom() < 0.5 ? 1 : -1;
+            const swimSpeed = rng(0.3, 0.7);
+            hazards.push({
+                x: sx, y: nextPlatformY + 2, w: 10, h: 6,
+                originX: sx, swimDir, swimSpeed,
+                swimRange: rng(20, 45), swimTimer: rng(0, 100),
+                bobTimer: rng(0, 100)
+            });
         }
     }
 }
@@ -469,25 +476,49 @@ function drawHazard(h, camY) {
     const sy = h.y - camY;
     const x = Math.round(h.x);
     const y = Math.round(sy);
-    // Fish body (oval-ish)
-    drawRect(x + 2, y, 4, 6, PAL.fishBody);
-    drawRect(x + 1, y + 1, 6, 4, PAL.fishBody);
-    // Belly (lighter underside)
-    drawRect(x + 2, y + 3, 4, 2, PAL.fishBelly);
-    drawRect(x + 1, y + 4, 6, 1, PAL.fishBelly);
-    // Tail fin (left side)
-    drawRect(x - 1, y + 1, 2, 4, PAL.fishTail);
-    drawPixel(x - 2, y + 2, PAL.fishTail);
-    drawPixel(x - 2, y + 3, PAL.fishTail);
-    // Dorsal fin (top)
-    drawPixel(x + 4, y - 1, PAL.fishFin);
-    drawPixel(x + 5, y - 1, PAL.fishFin);
-    drawPixel(x + 5, y, PAL.fishFin);
-    // Eye
-    drawPixel(x + 5, y + 2, PAL.fishEye);
-    drawPixel(x + 6, y + 2, PAL.fishPupil);
-    // Mouth
-    drawPixel(x + 7, y + 3, PAL.fishBody);
+    // Determine facing direction from swim velocity
+    const vel = Math.cos(h.swimTimer * h.swimSpeed);
+    const facingRight = vel >= 0;
+    // Tail wag animation
+    const tailWag = Math.sin(h.bobTimer * 3) > 0 ? 1 : 0;
+
+    if (facingRight) {
+        // Fish facing right
+        drawRect(x + 2, y, 6, 6, PAL.fishBody);
+        drawRect(x + 1, y + 1, 8, 4, PAL.fishBody);
+        // Belly
+        drawRect(x + 2, y + 3, 6, 2, PAL.fishBelly);
+        drawRect(x + 1, y + 4, 8, 1, PAL.fishBelly);
+        // Tail fin (left side)
+        drawRect(x - 1, y + 1 + tailWag, 2, 3, PAL.fishTail);
+        drawPixel(x - 2, y + 2 + tailWag, PAL.fishTail);
+        // Dorsal fin
+        drawPixel(x + 5, y - 1, PAL.fishFin);
+        drawPixel(x + 6, y - 1, PAL.fishFin);
+        // Eye
+        drawPixel(x + 7, y + 2, PAL.fishEye);
+        drawPixel(x + 8, y + 2, PAL.fishPupil);
+        // Mouth
+        drawPixel(x + 9, y + 3, PAL.fishBody);
+    } else {
+        // Fish facing left (mirrored)
+        drawRect(x + 2, y, 6, 6, PAL.fishBody);
+        drawRect(x + 1, y + 1, 8, 4, PAL.fishBody);
+        // Belly
+        drawRect(x + 2, y + 3, 6, 2, PAL.fishBelly);
+        drawRect(x + 1, y + 4, 8, 1, PAL.fishBelly);
+        // Tail fin (right side)
+        drawRect(x + 9, y + 1 + tailWag, 2, 3, PAL.fishTail);
+        drawPixel(x + 11, y + 2 + tailWag, PAL.fishTail);
+        // Dorsal fin
+        drawPixel(x + 3, y - 1, PAL.fishFin);
+        drawPixel(x + 4, y - 1, PAL.fishFin);
+        // Eye
+        drawPixel(x + 2, y + 2, PAL.fishEye);
+        drawPixel(x + 1, y + 2, PAL.fishPupil);
+        // Mouth
+        drawPixel(x, y + 3, PAL.fishBody);
+    }
 }
 
 // ── Draw HUD ──
@@ -653,8 +684,13 @@ function update() {
         }
     }
 
-    // Hazard collision
+    // Update & collide hazards (swimming fish)
     for (const h of hazards) {
+        h.swimTimer += 0.02;
+        h.bobTimer += 0.04;
+        h.x = h.originX + Math.sin(h.swimTimer * h.swimSpeed) * h.swimRange;
+        h.x = clamp(h.x, 14, W - 14 - h.w);
+        h.y += Math.sin(h.bobTimer) * 0.15; // gentle vertical bob
         if (aabb(p, h)) {
             killPlayer();
             return;
