@@ -984,19 +984,29 @@ const ROAD_LEFT = 32;
 const ROAD_RIGHT = W - 32;
 
 function spawnCarObstacle() {
-    const lane = Math.floor(Math.random() * 4);
+    // Pick a lane that doesn't overlap with nearby cars
+    const occupiedLanes = new Set();
+    for (const ob of bikeObstacles) {
+        // Only check cars near the spawn zone (top or bottom)
+        if (ob.y < 40 || ob.y > H - 40) {
+            occupiedLanes.add(ob.lane);
+        }
+    }
+    const freeLanes = [0, 1, 2, 3].filter(l => !occupiedLanes.has(l));
+    if (freeLanes.length === 0) return; // skip spawn if all lanes busy
+    const lane = freeLanes[Math.floor(Math.random() * freeLanes.length)];
     const lx = bikeLanes[lane];
-    // Car colors
     const carColors = ['#cc3333', '#3366cc', '#33aa33', '#cccc33', '#cc66cc', '#ff8833', '#eeeeee'];
     const color = carColors[Math.floor(Math.random() * carColors.length)];
-    const goingUp = Math.random() < 0.3; // some cars in opposing lane
+    const goingUp = Math.random() < 0.3;
     bikeObstacles.push({
         x: lx - 6, y: goingUp ? H + 20 : -24,
         w: 12, h: 20,
         vy: goingUp ? -0.8 * bikeSpeed : 1.5 * bikeSpeed,
         color,
         type: 'car',
-        lane
+        lane,
+        laneChangeTimer: 0
     });
 }
 
@@ -1049,7 +1059,7 @@ function updateBike() {
         return;
     }
 
-    // Input: lane switching
+    // Input: lane switching (left/right)
     const dir = inputDir();
     if (dir < 0 && !b._movedLeft) {
         b.lane = Math.max(0, b.lane - 1);
@@ -1059,6 +1069,14 @@ function updateBike() {
         b.lane = Math.min(3, b.lane + 1);
         b._movedRight = true;
     } else if (dir <= 0) { b._movedRight = false; }
+
+    // Input: vertical movement (up/down)
+    const goUp = keys['ArrowUp'] || keys['KeyW'];
+    const goDown = keys['ArrowDown'] || keys['KeyS'];
+    if (goUp) b.y -= 1.5;
+    if (goDown) b.y += 1.5;
+    // Clamp vertical position
+    b.y = clamp(b.y, 16, H - 20);
 
     // Smooth horizontal movement to target lane
     const targetX = bikeLanes[b.lane] - 5;
@@ -1100,9 +1118,44 @@ function updateBike() {
         bikeChocoTimer = Math.max(50, 100 - score / 6);
     }
 
-    // Update cars
+    // Update cars (with lane-change avoidance)
     for (const ob of bikeObstacles) {
         ob.y += ob.vy;
+        ob.laneChangeTimer = Math.max(0, (ob.laneChangeTimer || 0) - 1);
+
+        // Check if another car is ahead in the same lane
+        let blocked = false;
+        for (const other of bikeObstacles) {
+            if (other === ob || other.lane !== ob.lane) continue;
+            const dy = other.y - ob.y;
+            // "ahead" depends on direction
+            if (ob.vy > 0 && dy > 0 && dy < 40) blocked = true;
+            if (ob.vy < 0 && dy < 0 && dy > -40) blocked = true;
+        }
+
+        if (blocked && ob.laneChangeTimer <= 0) {
+            // Try to change lane to avoid
+            const tryLanes = [];
+            if (ob.lane > 0) tryLanes.push(ob.lane - 1);
+            if (ob.lane < 3) tryLanes.push(ob.lane + 1);
+            // Pick a free adjacent lane
+            for (const nl of tryLanes) {
+                let laneFree = true;
+                for (const other of bikeObstacles) {
+                    if (other === ob || other.lane !== nl) continue;
+                    if (Math.abs(other.y - ob.y) < 30) { laneFree = false; break; }
+                }
+                if (laneFree) {
+                    ob.lane = nl;
+                    ob.laneChangeTimer = 60; // cooldown
+                    break;
+                }
+            }
+        }
+
+        // Smooth horizontal slide to lane position
+        const targetX = bikeLanes[ob.lane] - 6;
+        ob.x = lerp(ob.x, targetX, 0.08);
     }
     bikeObstacles = bikeObstacles.filter(ob => ob.y > -40 && ob.y < H + 40);
 
