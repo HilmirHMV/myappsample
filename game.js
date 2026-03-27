@@ -144,8 +144,8 @@ function generatePlatformsUpTo(targetY) {
         // Occasional coin above platform
         if (seededRandom() < 0.4) {
             coins.push({
-                x: px + pw / 2 - 3, y: nextPlatformY - 14,
-                w: 6, h: 6, collected: false, animTimer: Math.random() * 100
+                x: px + pw / 2 - 5, y: nextPlatformY - 16,
+                w: 10, h: 8, collected: false, animTimer: Math.random() * 100
             });
         }
 
@@ -403,28 +403,65 @@ function drawPlatform(p, camY) {
     }
 }
 
-// ── Draw chocolate ──
+// ── Draw chocolate bar ──
 function drawCoin(c, camY) {
     if (c.collected) return;
     const sy = c.y - camY;
     const bob = Math.sin(c.animTimer * 0.08) * 2;
     const x = Math.round(c.x);
     const y = Math.round(sy + bob);
-    // Wrapper (red/pink foil)
-    drawRect(x, y + 1, 6, 4, PAL.chocoWrap);
-    drawRect(x + 1, y, 4, 6, PAL.chocoWrap);
-    // Wrapper highlight
-    drawPixel(x + 1, y + 1, PAL.chocoWrapHi);
-    drawPixel(x + 2, y, PAL.chocoWrapHi);
-    // Exposed chocolate (center)
-    drawRect(x + 1, y + 2, 4, 2, PAL.choco);
-    // Chocolate highlight
-    drawPixel(x + 2, y + 2, PAL.chocoHi);
-    // Wrapper twist ends
-    drawPixel(x - 1, y + 2, PAL.chocoWrap);
-    drawPixel(x - 1, y + 3, PAL.chocoWrap);
-    drawPixel(x + 6, y + 2, PAL.chocoWrap);
-    drawPixel(x + 6, y + 3, PAL.chocoWrap);
+
+    // Gold foil wrapper (peeled back at top-right)
+    // Back foil layer (gold, slightly visible behind bar)
+    drawRect(x, y, 10, 8, '#c8a420');       // base gold foil
+    drawRect(x, y, 10, 1, '#ddb830');       // foil top highlight
+    drawRect(x, y + 7, 10, 1, '#a08018');   // foil bottom shadow
+    drawPixel(x, y, '#ddb830');             // corner highlight
+    drawPixel(x + 9, y + 7, '#8a6a10');     // corner shadow
+
+    // Foil folded-back flap (top-right, peeled open to reveal chocolate)
+    drawRect(x + 7, y - 1, 3, 2, '#ddb830');
+    drawPixel(x + 7, y - 1, '#e8cc44');
+    drawPixel(x + 9, y, '#c8a420');
+
+    // Chocolate bar body (exposed from wrapper, rich brown)
+    drawRect(x + 1, y + 1, 8, 6, '#5c3317');   // dark chocolate base
+    drawRect(x + 1, y + 1, 8, 1, '#7a4a2a');   // top edge highlight (light catching)
+
+    // Chocolate bar segments (2x2 grid of squares with grooves)
+    // Top-left segment
+    drawRect(x + 1, y + 1, 4, 3, '#6b3d20');
+    drawPixel(x + 2, y + 2, '#7a4a2a');         // segment highlight
+    // Top-right segment
+    drawRect(x + 5, y + 1, 4, 3, '#6b3d20');
+    drawPixel(x + 6, y + 2, '#7a4a2a');         // segment highlight
+    // Bottom-left segment
+    drawRect(x + 1, y + 4, 4, 3, '#5c3317');
+    drawPixel(x + 2, y + 5, '#6b3d20');         // subtle highlight
+    // Bottom-right segment
+    drawRect(x + 5, y + 4, 4, 3, '#5c3317');
+    drawPixel(x + 6, y + 5, '#6b3d20');         // subtle highlight
+
+    // Segment divider grooves (darker lines between segments)
+    drawRect(x + 5, y + 1, 1, 6, '#4a2510');    // vertical groove
+    drawRect(x + 1, y + 4, 8, 1, '#4a2510');    // horizontal groove
+
+    // Top specular highlights (glossy chocolate look)
+    drawPixel(x + 2, y + 1, '#8a5a36');
+    drawPixel(x + 3, y + 1, '#8a5a36');
+    drawPixel(x + 6, y + 1, '#8a5a36');
+
+    // Wrapper edge detail (gold foil border visible around chocolate)
+    drawPixel(x, y + 1, '#ddb830');
+    drawPixel(x, y + 6, '#c8a420');
+    drawPixel(x + 9, y + 1, '#c8a420');
+    drawPixel(x + 9, y + 6, '#a08018');
+
+    // Tiny shimmer animation on foil
+    const shimmer = Math.sin(c.animTimer * 0.15) > 0.5;
+    if (shimmer) {
+        drawPixel(x + 8, y - 1, '#ffe866');
+    }
 }
 
 // ── Draw hazard (fish) ──
