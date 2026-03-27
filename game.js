@@ -29,7 +29,8 @@ const bctx = buf.getContext('2d');
 bctx.imageSmoothingEnabled = false;
 
 // ── Game state ──
-let state = 'title'; // title | playing | dead
+let gameMode = 'tower'; // 'tower' | 'bike'
+let state = 'title'; // title | modeselect | playing | dead
 let camera = { y: 0 };
 let score = 0;
 let highScore = parseInt(localStorage.getItem('towerHighScore') || '0');
@@ -89,8 +90,12 @@ let touchLeft = false, touchRight = false, touchJump = false;
 
 document.addEventListener('keydown', e => {
     keys[e.code] = true;
-    if (e.code === 'Enter' || e.code === 'Space') {
-        if (state === 'title' || state === 'dead') startGame();
+    if (state === 'title') {
+        if (e.code === 'Digit1' || e.code === 'Numpad1') { gameMode = 'tower'; startGame(); }
+        else if (e.code === 'Digit2' || e.code === 'Numpad2') { gameMode = 'bike'; startGame(); }
+    } else if (state === 'dead') {
+        if (e.code === 'Enter' || e.code === 'Space') startGame();
+        else if (e.code === 'Escape') showModeSelect();
     }
 });
 document.addEventListener('keyup', e => { keys[e.code] = false; });
@@ -100,7 +105,12 @@ canvas.addEventListener('touchstart', e => {
     for (const t of e.changedTouches) {
         const rect = canvas.getBoundingClientRect();
         const x = t.clientX - rect.left;
-        if (state === 'title' || state === 'dead') { startGame(); return; }
+        const y = t.clientY - rect.top;
+        if (state === 'title') {
+            if (y < rect.height / 2) { gameMode = 'tower'; } else { gameMode = 'bike'; }
+            startGame(); return;
+        }
+        if (state === 'dead') { startGame(); return; }
         if (x < rect.width / 3) touchLeft = true;
         else if (x > rect.width * 2 / 3) touchRight = true;
         else touchJump = true;
@@ -111,7 +121,8 @@ canvas.addEventListener('touchend', e => {
     touchLeft = false; touchRight = false; touchJump = false;
 });
 canvas.addEventListener('click', () => {
-    if (state === 'title' || state === 'dead') startGame();
+    // Only handle dead state clicks; title needs mode selection via keys
+    if (state === 'dead') startGame();
 });
 
 // ── Helpers ──
@@ -195,26 +206,64 @@ function cleanupBelow(bottomY) {
     hazards = hazards.filter(h => h.y < bottomY + H);
 }
 
+// ── Mode select ──
+function showModeSelect() {
+    state = 'title';
+    overlay.innerHTML = `
+        <h1>SELECT MODE</h1>
+        <p style="color:#ff6644;font-size:16px;">[1] TOWER ASCENT</p>
+        <p style="font-size:11px;color:#888;">Climb the endless tower</p>
+        <p style="color:#44bbff;font-size:16px;margin-top:10px;">[2] BIKE DASH</p>
+        <p style="font-size:11px;color:#888;">Ride &amp; dodge cars and fish</p>
+        <p class="blink" style="margin-top:16px;">Press 1 or 2 to start</p>
+        <p style="margin-top:10px;font-size:11px;color:#555;">Arrow keys / WASD to move</p>
+    `;
+    overlay.classList.remove('hidden');
+}
+
+// ── Bike mode state ──
+let bike = {
+    x: W / 2 - 5, y: H - 40, lane: 1,
+    w: 10, h: 14, alive: true, deathTimer: 0,
+    tilt: 0, pedalFrame: 0, pedalTimer: 0
+};
+let bikeSpeed = 1.0;
+let bikeScroll = 0;
+let bikeObstacles = [];
+let bikeFish = [];
+let bikeChocolates = [];
+let bikeNextSpawn = 0;
+let bikeFishTimer = 0;
+let bikeChocoTimer = 0;
+let bikeHighScore = parseInt(localStorage.getItem('bikeHighScore') || '0');
+let bikeLanes = []; // lane x-centers calculated from road width
+
 // ── Start / Reset ──
 function startGame() {
     state = 'playing';
     overlay.classList.add('hidden');
     seededRandom(Date.now() & 0xffffff);
-    platforms = [];
-    hazards = [];
-    coins = [];
     particles = [];
     score = 0;
     screenShake = 0;
+
+    if (gameMode === 'tower') {
+        startTowerMode();
+    } else {
+        startBikeMode();
+    }
+}
+
+function startTowerMode() {
+    platforms = [];
+    hazards = [];
+    coins = [];
     towerLevel = 0;
     levelFlash = 0;
     nextPlatformY = H - TILE * 3;
 
-    // Ground floor
     floorHeight = H - TILE;
     platforms.push({ x: 0, y: floorHeight, w: W, h: TILE, type: 'static', moveSpeed: 0, moveRange: 0, originX: 0 });
-
-    // Starting platforms
     generatePlatformsUpTo(-H * 2);
 
     player.x = W / 2 - 4;
@@ -227,6 +276,35 @@ function startGame() {
 
     camera.y = player.y - H / 2;
     deathY = camera.y + H + 40;
+}
+
+function startBikeMode() {
+    // 4 lanes on the road
+    const roadLeft = 32;
+    const roadRight = W - 32;
+    const roadW = roadRight - roadLeft;
+    const laneW = roadW / 4;
+    bikeLanes = [];
+    for (let i = 0; i < 4; i++) {
+        bikeLanes.push(roadLeft + laneW * i + laneW / 2);
+    }
+
+    bike.lane = 1;
+    bike.x = bikeLanes[1] - 5;
+    bike.y = H - 40;
+    bike.alive = true;
+    bike.deathTimer = 0;
+    bike.tilt = 0;
+    bike.pedalFrame = 0;
+    bike.pedalTimer = 0;
+    bikeSpeed = 1.0;
+    bikeScroll = 0;
+    bikeObstacles = [];
+    bikeFish = [];
+    bikeChocolates = [];
+    bikeNextSpawn = 60;
+    bikeFishTimer = 120;
+    bikeChocoTimer = 80;
 }
 
 // ── Particle system ──
@@ -596,6 +674,7 @@ function update() {
                 <p>Height: ${score}</p>
                 <p>Best: ${highScore}</p>
                 <p class="blink" style="margin-top:16px">Press ENTER or tap to retry</p>
+                <p style="font-size:11px;color:#555;margin-top:8px">ESC for mode select</p>
             `;
             overlay.classList.remove('hidden');
         }
@@ -897,10 +976,436 @@ function render() {
     ctx.drawImage(buf, 0, 0, W, H, 0, 0, canvas.width, canvas.height);
 }
 
-// ── Game loop ──
+// ══════════════════════════════════════════════
+// ── BIKE DASH MODE ──
+// ══════════════════════════════════════════════
+
+const ROAD_LEFT = 32;
+const ROAD_RIGHT = W - 32;
+
+function spawnCarObstacle() {
+    const lane = Math.floor(Math.random() * 4);
+    const lx = bikeLanes[lane];
+    // Car colors
+    const carColors = ['#cc3333', '#3366cc', '#33aa33', '#cccc33', '#cc66cc', '#ff8833', '#eeeeee'];
+    const color = carColors[Math.floor(Math.random() * carColors.length)];
+    const goingUp = Math.random() < 0.3; // some cars in opposing lane
+    bikeObstacles.push({
+        x: lx - 6, y: goingUp ? H + 20 : -24,
+        w: 12, h: 20,
+        vy: goingUp ? -0.8 * bikeSpeed : 1.5 * bikeSpeed,
+        color,
+        type: 'car',
+        lane
+    });
+}
+
+function spawnBikeFish() {
+    // Fish swim horizontally across the road
+    const fromLeft = Math.random() < 0.5;
+    const fy = 20 + Math.random() * (H - 60);
+    const patterns = ['straight', 'wave', 'dive'];
+    const pat = patterns[Math.floor(Math.random() * patterns.length)];
+    bikeFish.push({
+        x: fromLeft ? -12 : W + 12,
+        y: fy, w: 10, h: 6,
+        vx: (fromLeft ? 1 : -1) * (0.6 + Math.random() * 0.8),
+        pattern: pat,
+        originY: fy,
+        timer: 0
+    });
+}
+
+function spawnBikeChocolate() {
+    const lane = Math.floor(Math.random() * 4);
+    const lx = bikeLanes[lane];
+    bikeChocolates.push({
+        x: lx - 5, y: -12,
+        w: 10, h: 8,
+        vy: 1.2 * bikeSpeed,
+        collected: false,
+        animTimer: 0
+    });
+}
+
+function updateBike() {
+    if (state !== 'playing') return;
+    const b = bike;
+
+    if (!b.alive) {
+        b.deathTimer++;
+        if (b.deathTimer > 60) {
+            state = 'dead';
+            if (score > bikeHighScore) { bikeHighScore = score; localStorage.setItem('bikeHighScore', bikeHighScore); }
+            overlay.innerHTML = `
+                <h1 style="color:#ff4444">WIPEOUT!</h1>
+                <p>Distance: ${score}</p>
+                <p>Best: ${bikeHighScore}</p>
+                <p class="blink" style="margin-top:16px">Press ENTER or tap to retry</p>
+                <p style="font-size:11px;color:#555;margin-top:8px">ESC for mode select</p>
+            `;
+            overlay.classList.remove('hidden');
+        }
+        return;
+    }
+
+    // Input: lane switching
+    const dir = inputDir();
+    if (dir < 0 && !b._movedLeft) {
+        b.lane = Math.max(0, b.lane - 1);
+        b._movedLeft = true;
+    } else if (dir >= 0) { b._movedLeft = false; }
+    if (dir > 0 && !b._movedRight) {
+        b.lane = Math.min(3, b.lane + 1);
+        b._movedRight = true;
+    } else if (dir <= 0) { b._movedRight = false; }
+
+    // Smooth horizontal movement to target lane
+    const targetX = bikeLanes[b.lane] - 5;
+    b.x = lerp(b.x, targetX, 0.18);
+    b.tilt = (targetX - b.x) * 0.3;
+
+    // Pedal animation
+    b.pedalTimer++;
+    if (b.pedalTimer > Math.max(3, 10 - bikeSpeed * 2)) {
+        b.pedalTimer = 0;
+        b.pedalFrame = 1 - b.pedalFrame;
+    }
+
+    // Score & speed increase
+    bikeScroll += bikeSpeed;
+    score = Math.floor(bikeScroll / 8);
+    bikeSpeed = 1.0 + score / 300; // gradually accelerate
+
+    // Spawn obstacles
+    bikeNextSpawn--;
+    if (bikeNextSpawn <= 0) {
+        spawnCarObstacle();
+        bikeNextSpawn = Math.max(25, 80 - score / 5);
+        // Sometimes spawn two cars at once at higher speeds
+        if (score > 100 && Math.random() < 0.3) spawnCarObstacle();
+    }
+
+    // Spawn fish
+    bikeFishTimer--;
+    if (bikeFishTimer <= 0) {
+        spawnBikeFish();
+        bikeFishTimer = Math.max(40, 120 - score / 4);
+    }
+
+    // Spawn chocolates
+    bikeChocoTimer--;
+    if (bikeChocoTimer <= 0) {
+        spawnBikeChocolate();
+        bikeChocoTimer = Math.max(50, 100 - score / 6);
+    }
+
+    // Update cars
+    for (const ob of bikeObstacles) {
+        ob.y += ob.vy;
+    }
+    bikeObstacles = bikeObstacles.filter(ob => ob.y > -40 && ob.y < H + 40);
+
+    // Update fish
+    for (const f of bikeFish) {
+        f.timer += 0.05;
+        f.x += f.vx * bikeSpeed;
+        switch (f.pattern) {
+            case 'wave':
+                f.y = f.originY + Math.sin(f.timer * 3) * 15;
+                break;
+            case 'dive':
+                f.y = f.originY + Math.sin(f.timer * 1.5) * 30;
+                break;
+            default:
+                break;
+        }
+    }
+    bikeFish = bikeFish.filter(f => f.x > -20 && f.x < W + 20);
+
+    // Update chocolates
+    for (const ch of bikeChocolates) {
+        ch.y += ch.vy;
+        ch.animTimer++;
+    }
+    bikeChocolates = bikeChocolates.filter(ch => ch.y < H + 20);
+
+    // Collision with bike
+    const bHit = { x: b.x + 1, y: b.y + 2, w: b.w - 2, h: b.h - 2 };
+
+    // Car collision
+    for (const ob of bikeObstacles) {
+        if (aabb(bHit, ob)) {
+            b.alive = false; b.deathTimer = 0;
+            screenShake = 10;
+            spawnParticles(b.x + 5, b.y + 7, PAL.red, 15, 4);
+            spawnParticles(b.x + 5, b.y + 7, '#888', 10, 3);
+            return;
+        }
+    }
+    // Fish collision
+    for (const f of bikeFish) {
+        if (aabb(bHit, f)) {
+            b.alive = false; b.deathTimer = 0;
+            screenShake = 8;
+            spawnParticles(b.x + 5, b.y + 7, PAL.fishBody, 12, 4);
+            return;
+        }
+    }
+    // Chocolate collection
+    for (const ch of bikeChocolates) {
+        if (!ch.collected && aabb(bHit, ch)) {
+            ch.collected = true;
+            score += 15;
+            spawnParticles(ch.x + 5, ch.y + 4, '#5c3317', 8, 3);
+        }
+    }
+
+    // Particles
+    particles = particles.filter(pt => {
+        pt.x += pt.vx; pt.y += pt.vy;
+        pt.vy += 0.08; pt.life--;
+        return pt.life > 0;
+    });
+    if (screenShake > 0) screenShake *= 0.85;
+    if (screenShake < 0.5) screenShake = 0;
+}
+
+// ── Bike mode drawing ──
+
+function drawBikeRoad() {
+    // Sky
+    bctx.fillStyle = '#88bbdd';
+    bctx.fillRect(0, 0, W, H);
+
+    // Grass sides
+    bctx.fillStyle = '#44aa44';
+    bctx.fillRect(0, 0, ROAD_LEFT, H);
+    bctx.fillRect(ROAD_RIGHT, 0, W - ROAD_RIGHT, H);
+
+    // Grass texture
+    const grassScroll = (bikeScroll * 0.6) % 8;
+    for (let gy = -8; gy < H; gy += 8) {
+        const ry = gy + grassScroll;
+        drawPixel(5, ry, '#3d9a3d');
+        drawPixel(18, ry + 3, '#55bb55');
+        drawPixel(W - 10, ry + 1, '#3d9a3d');
+        drawPixel(W - 22, ry + 5, '#55bb55');
+    }
+
+    // Road surface
+    bctx.fillStyle = '#555555';
+    bctx.fillRect(ROAD_LEFT, 0, ROAD_RIGHT - ROAD_LEFT, H);
+
+    // Road edges (curb)
+    drawRect(ROAD_LEFT, 0, 2, H, '#888888');
+    drawRect(ROAD_RIGHT - 2, 0, 2, H, '#888888');
+
+    // Lane dashes (scrolling)
+    const dashLen = 12;
+    const gapLen = 10;
+    const totalDash = dashLen + gapLen;
+    const dashOffset = (bikeScroll * 1.5) % totalDash;
+    bctx.fillStyle = '#cccccc';
+    for (let li = 1; li < 4; li++) {
+        const lx = ROAD_LEFT + (ROAD_RIGHT - ROAD_LEFT) * li / 4;
+        for (let dy = -dashLen + dashOffset; dy < H + dashLen; dy += totalDash) {
+            drawRect(lx - 1, dy, 2, dashLen, '#cccccc');
+        }
+    }
+}
+
+function drawBikeCar(ob) {
+    const x = Math.round(ob.x);
+    const y = Math.round(ob.y);
+    // Car body
+    drawRect(x, y + 4, 12, 12, ob.color);
+    // Roof
+    drawRect(x + 2, y + 6, 8, 6, darkenColor(ob.color));
+    // Windshield
+    drawRect(x + 2, y + 4, 8, 3, '#88ccff');
+    drawPixel(x + 3, y + 4, '#aaddff');
+    // Rear window
+    drawRect(x + 2, y + 14, 8, 2, '#6699bb');
+    // Wheels
+    drawRect(x - 1, y + 5, 2, 4, '#222');
+    drawRect(x - 1, y + 13, 2, 4, '#222');
+    drawRect(x + 11, y + 5, 2, 4, '#222');
+    drawRect(x + 11, y + 13, 2, 4, '#222');
+    // Headlights
+    drawPixel(x + 2, y + 3, '#ffee88');
+    drawPixel(x + 9, y + 3, '#ffee88');
+    // Taillights
+    drawPixel(x + 2, y + 16, '#ff4444');
+    drawPixel(x + 9, y + 16, '#ff4444');
+    // Top highlight
+    drawRect(x + 1, y + 4, 10, 1, lightenColor(ob.color));
+}
+
+function darkenColor(hex) {
+    const r = Math.max(0, parseInt(hex.slice(1,3), 16) - 40);
+    const g = Math.max(0, parseInt(hex.slice(3,5), 16) - 40);
+    const b = Math.max(0, parseInt(hex.slice(5,7), 16) - 40);
+    return '#' + r.toString(16).padStart(2,'0') + g.toString(16).padStart(2,'0') + b.toString(16).padStart(2,'0');
+}
+function lightenColor(hex) {
+    const r = Math.min(255, parseInt(hex.slice(1,3), 16) + 40);
+    const g = Math.min(255, parseInt(hex.slice(3,5), 16) + 40);
+    const b = Math.min(255, parseInt(hex.slice(5,7), 16) + 40);
+    return '#' + r.toString(16).padStart(2,'0') + g.toString(16).padStart(2,'0') + b.toString(16).padStart(2,'0');
+}
+
+function drawBikeFish(f) {
+    const x = Math.round(f.x);
+    const y = Math.round(f.y);
+    const facingRight = f.vx > 0;
+
+    if (facingRight) {
+        drawRect(x + 2, y, 6, 6, PAL.fishBody);
+        drawRect(x + 1, y + 1, 8, 4, PAL.fishBody);
+        drawRect(x + 2, y + 3, 6, 2, PAL.fishBelly);
+        drawRect(x - 1, y + 1, 2, 3, PAL.fishTail);
+        drawPixel(x + 5, y - 1, PAL.fishFin);
+        drawPixel(x + 7, y + 2, PAL.fishEye);
+        drawPixel(x + 8, y + 2, PAL.fishPupil);
+    } else {
+        drawRect(x + 2, y, 6, 6, PAL.fishBody);
+        drawRect(x + 1, y + 1, 8, 4, PAL.fishBody);
+        drawRect(x + 2, y + 3, 6, 2, PAL.fishBelly);
+        drawRect(x + 9, y + 1, 2, 3, PAL.fishTail);
+        drawPixel(x + 4, y - 1, PAL.fishFin);
+        drawPixel(x + 2, y + 2, PAL.fishEye);
+        drawPixel(x + 1, y + 2, PAL.fishPupil);
+    }
+}
+
+function drawBiker(bx, by) {
+    const x = Math.round(bx);
+    const y = Math.round(by);
+    const frame = bike.pedalFrame;
+
+    // ── Bicycle frame ──
+    // Wheels
+    drawRect(x + 1, y + 11, 3, 3, '#444');
+    drawPixel(x + 2, y + 12, '#888');
+    drawRect(x + 7, y + 11, 3, 3, '#444');
+    drawPixel(x + 8, y + 12, '#888');
+    // Frame (triangle)
+    drawRect(x + 3, y + 10, 5, 1, '#777');
+    drawRect(x + 4, y + 9, 1, 2, '#777');
+    drawRect(x + 6, y + 9, 1, 2, '#777');
+    // Seat
+    drawRect(x + 3, y + 9, 3, 1, '#444');
+    // Handlebars
+    drawRect(x + 7, y + 8, 2, 1, '#888');
+
+    // ── Rider (same protagonist) ──
+    // Legs on pedals
+    if (frame === 0) {
+        drawRect(x + 3, y + 8, 2, 2, PAL.pants); // left leg
+        drawRect(x + 6, y + 7, 2, 2, PAL.pants); // right leg
+        drawRect(x + 3, y + 10, 2, 1, PAL.shoe);
+        drawRect(x + 6, y + 9, 2, 1, PAL.shoe);
+    } else {
+        drawRect(x + 3, y + 7, 2, 2, PAL.pants);
+        drawRect(x + 6, y + 8, 2, 2, PAL.pants);
+        drawRect(x + 3, y + 9, 2, 1, PAL.shoe);
+        drawRect(x + 6, y + 10, 2, 1, PAL.shoe);
+    }
+    // Torso
+    drawRect(x + 3, y + 4, 5, 4, PAL.shirt);
+    drawPixel(x + 4, y + 4, PAL.shirtHi);
+    // Arms reaching to handlebars
+    drawRect(x + 7, y + 5, 2, 2, PAL.skin);
+    drawPixel(x + 2, y + 5, PAL.skin);
+    // Head
+    drawRect(x + 3, y + 1, 5, 3, PAL.skin);
+    // Hair
+    drawRect(x + 3, y, 5, 2, PAL.hair);
+    drawRect(x + 2, y, 6, 1, PAL.hair);
+    drawPixel(x + 4, y, PAL.hairHi);
+    drawPixel(x + 6, y, PAL.hairHi);
+    // Wind-blown hair strands
+    drawPixel(x + 2, y - 1, PAL.hair);
+    drawPixel(x + 3, y - 1, PAL.hairHi);
+    // Eyes
+    drawPixel(x + 5, y + 2, PAL.black);
+    drawPixel(x + 7, y + 2, PAL.black);
+}
+
+function renderBike() {
+    bctx.clearRect(0, 0, W, H);
+
+    const shakeX = screenShake > 0 ? (Math.random() - 0.5) * screenShake : 0;
+    const shakeY = screenShake > 0 ? (Math.random() - 0.5) * screenShake : 0;
+    bctx.save();
+    bctx.translate(shakeX, shakeY);
+
+    // Road
+    drawBikeRoad();
+
+    // Chocolates
+    for (const ch of bikeChocolates) {
+        if (!ch.collected) drawCoin(ch, 0); // reuse chocolate drawing (no camera offset)
+    }
+
+    // Cars
+    for (const ob of bikeObstacles) drawBikeCar(ob);
+
+    // Fish
+    for (const f of bikeFish) drawBikeFish(f);
+
+    // Particles
+    for (const pt of particles) {
+        bctx.globalAlpha = pt.life / pt.maxLife;
+        drawRect(pt.x, pt.y, pt.size, pt.size, pt.color);
+    }
+    bctx.globalAlpha = 1;
+
+    // Biker
+    if (bike.alive) {
+        drawBiker(bike.x, bike.y);
+    } else if (bike.deathTimer < 30) {
+        if (bike.deathTimer % 4 < 2) drawBiker(bike.x, bike.y);
+    }
+
+    // HUD
+    bctx.fillStyle = '#fff';
+    bctx.font = '8px monospace';
+    bctx.textAlign = 'left';
+    bctx.fillText('DIST: ' + score, 4, 10);
+    bctx.textAlign = 'right';
+    bctx.fillText('BEST: ' + bikeHighScore, W - 4, 10);
+    bctx.textAlign = 'left';
+
+    // Speed indicator
+    const spdW = 30;
+    drawRect(4, 14, spdW, 4, '#333');
+    const spdFill = clamp((bikeSpeed - 1) / 3, 0, 1);
+    const spdColor = spdFill < 0.5 ? '#44ff44' : spdFill < 0.8 ? '#ffcc00' : '#ff4444';
+    drawRect(4, 14, Math.floor(spdFill * spdW), 4, spdColor);
+
+    bctx.restore();
+
+    // Blit
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.drawImage(buf, 0, 0, W, H, 0, 0, canvas.width, canvas.height);
+}
+
+// ══════════════════════════════════════════════
+// ── MAIN GAME LOOP (dispatches by mode) ──
+// ══════════════════════════════════════════════
+
 function gameLoop() {
-    update();
-    render();
+    if (gameMode === 'bike' && state === 'playing') {
+        updateBike();
+        renderBike();
+    } else if (gameMode === 'bike' && (state === 'dead' || state === 'title')) {
+        renderBike(); // keep last frame visible behind overlay
+    } else {
+        update();
+        render();
+    }
     requestAnimationFrame(gameLoop);
 }
 
