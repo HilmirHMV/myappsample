@@ -133,9 +133,9 @@ function updateBike() {
         b._movedRight = true;
     } else if (dir <= 0) { b._movedRight = false; }
 
-    // Input: vertical movement (up/down)
-    const goUp = keys['ArrowUp'] || keys['KeyW'];
-    const goDown = keys['ArrowDown'] || keys['KeyS'];
+    // Input: vertical movement (up/down, keyboard + touch)
+    const goUp = keys['ArrowUp'] || keys['KeyW'] || touchUp;
+    const goDown = keys['ArrowDown'] || keys['KeyS'] || touchDown;
     if (goUp) b.y -= 2.5;
     if (goDown) b.y += 2.5;
     b.y = clamp(b.y, 16, H - 20);

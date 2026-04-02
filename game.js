@@ -40,7 +40,7 @@ const seededRandom = (function() {
 
 // ── Input ──
 const keys = {};
-let touchLeft = false, touchRight = false, touchJump = false;
+let touchLeft = false, touchRight = false, touchUp = false, touchDown = false;
 
 document.addEventListener('keydown', e => {
     keys[e.code] = true;
@@ -50,20 +50,31 @@ document.addEventListener('keydown', e => {
 });
 document.addEventListener('keyup', e => { keys[e.code] = false; });
 
+function updateTouchFromEvent(e) {
+    touchLeft = false; touchRight = false; touchUp = false; touchDown = false;
+    for (const t of e.touches) {
+        const rect = canvas.getBoundingClientRect();
+        const x = (t.clientX - rect.left) / rect.width;
+        const y = (t.clientY - rect.top) / rect.height;
+        if (x < 0.33) touchLeft = true;
+        if (x > 0.67) touchRight = true;
+        if (y < 0.4) touchUp = true;
+        if (y > 0.6) touchDown = true;
+    }
+}
+
 canvas.addEventListener('touchstart', e => {
     e.preventDefault();
-    for (const t of e.changedTouches) {
-        const rect = canvas.getBoundingClientRect();
-        const x = t.clientX - rect.left;
-        if (state === 'title' || state === 'dead') { startGame(); return; }
-        if (x < rect.width / 3) touchLeft = true;
-        else if (x > rect.width * 2 / 3) touchRight = true;
-        else touchJump = true;
-    }
+    if (state === 'title' || state === 'dead') { startGame(); return; }
+    updateTouchFromEvent(e);
+});
+canvas.addEventListener('touchmove', e => {
+    e.preventDefault();
+    updateTouchFromEvent(e);
 });
 canvas.addEventListener('touchend', e => {
     e.preventDefault();
-    touchLeft = false; touchRight = false; touchJump = false;
+    touchLeft = false; touchRight = false; touchUp = false; touchDown = false;
 });
 document.addEventListener('click', () => {
     if (state === 'title' || state === 'dead') startGame();
