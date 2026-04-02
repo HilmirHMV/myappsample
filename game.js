@@ -40,7 +40,9 @@ const seededRandom = (function() {
 
 // ── Input ──
 const keys = {};
-let touchLeft = false, touchRight = false, touchUp = false, touchDown = false;
+let touchActive = false;
+let touchGameX = 0; // touch position in game coords (0..W)
+let touchGameY = 0; // touch position in game coords (0..H)
 
 document.addEventListener('keydown', e => {
     keys[e.code] = true;
@@ -51,17 +53,13 @@ document.addEventListener('keydown', e => {
 document.addEventListener('keyup', e => { keys[e.code] = false; });
 
 function updateTouchFromEvent(e) {
-    touchLeft = false; touchRight = false; touchUp = false; touchDown = false;
+    if (e.touches.length === 0) { touchActive = false; return; }
+    touchActive = true;
     const rect = canvas.getBoundingClientRect();
-    for (let i = 0; i < e.touches.length; i++) {
-        const t = e.touches[i];
-        const x = (t.clientX - rect.left) / rect.width;
-        const y = (t.clientY - rect.top) / rect.height;
-        if (x < 0.33) touchLeft = true;
-        if (x > 0.67) touchRight = true;
-        if (y < 0.4) touchUp = true;
-        if (y > 0.6) touchDown = true;
-    }
+    // Use the first touch — convert screen position to game coordinates
+    const t = e.touches[0];
+    touchGameX = ((t.clientX - rect.left) / rect.width) * W;
+    touchGameY = ((t.clientY - rect.top) / rect.height) * H;
 }
 
 function handleTouchStart(e) {
@@ -75,7 +73,7 @@ function handleTouchMove(e) {
 }
 function handleTouchEnd(e) {
     e.preventDefault();
-    touchLeft = false; touchRight = false; touchUp = false; touchDown = false;
+    touchActive = false;
 }
 
 // Use { passive: false } for Safari compatibility
