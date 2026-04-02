@@ -139,8 +139,8 @@ function aabb(a, b) {
 }
 function inputDir() {
     let dx = 0;
-    if (keys['ArrowLeft'] || keys['KeyA'] || touchLeft) dx -= 1;
-    if (keys['ArrowRight'] || keys['KeyD'] || touchRight) dx += 1;
+    if (keys['ArrowLeft'] || keys['KeyA'] || dpadLeft) dx -= 1;
+    if (keys['ArrowRight'] || keys['KeyD'] || dpadRight) dx += 1;
     return dx;
 }
 
