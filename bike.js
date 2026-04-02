@@ -152,7 +152,10 @@ function updateBike() {
         b.deathTimer++;
         if (b.deathTimer > 60) {
             state = 'dead';
-            if (score > bikeHighScore) { bikeHighScore = score; localStorage.setItem('bikeHighScore', bikeHighScore); }
+            if (score > bikeHighScore) {
+                bikeHighScore = score;
+                try { localStorage.setItem('bikeHighScore', bikeHighScore); } catch (e) { /* localStorage unavailable */ }
+            }
             overlay.textContent = '';
             const h = document.createElement('h1');
             h.style.color = '#ff4444';
