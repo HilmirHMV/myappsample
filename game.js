@@ -55,16 +55,16 @@ function enableMobile() {
 
 // D-pad layout (in game coords, bottom-right corner)
 const DPAD = {
-    cx: W - 22,      // center x
-    cy: H - 22,      // center y
-    btnSize: 12,      // button size
+    cx: W - 28,      // center x
+    cy: H - 28,      // center y
+    btnSize: 18,      // button size
     gap: 1,           // gap between buttons
 };
 // Computed button rects (set once)
-DPAD.up    = { x: DPAD.cx - 6, y: DPAD.cy - 19, w: 12, h: 12 };
-DPAD.down  = { x: DPAD.cx - 6, y: DPAD.cy + 7,  w: 12, h: 12 };
-DPAD.left  = { x: DPAD.cx - 19, y: DPAD.cy - 6, w: 12, h: 12 };
-DPAD.right = { x: DPAD.cx + 7,  y: DPAD.cy - 6, w: 12, h: 12 };
+DPAD.up    = { x: DPAD.cx - 9, y: DPAD.cy - 28, w: 18, h: 18 };
+DPAD.down  = { x: DPAD.cx - 9, y: DPAD.cy + 10, w: 18, h: 18 };
+DPAD.left  = { x: DPAD.cx - 28, y: DPAD.cy - 9, w: 18, h: 18 };
+DPAD.right = { x: DPAD.cx + 10, y: DPAD.cy - 9, w: 18, h: 18 };
 
 function pointInRect(px, py, r) {
     return px >= r.x && px < r.x + r.w && py >= r.y && py < r.y + r.h;
@@ -286,22 +286,25 @@ function drawDpad() {
         const cy = r.y + r.h / 2;
         bctx.fillStyle = col;
         if (arrowDir === 'up') {
-            // Triangle pointing up
-            drawRect(cx - 1, cy - 2, 2, 1, col);
-            drawRect(cx - 2, cy - 1, 4, 1, col);
-            drawRect(cx - 3, cy, 6, 1, col);
+            drawRect(cx - 1, cy - 4, 2, 1, col);
+            drawRect(cx - 2, cy - 3, 4, 1, col);
+            drawRect(cx - 3, cy - 2, 6, 1, col);
+            drawRect(cx - 4, cy - 1, 8, 1, col);
         } else if (arrowDir === 'down') {
-            drawRect(cx - 3, cy - 1, 6, 1, col);
-            drawRect(cx - 2, cy, 4, 1, col);
-            drawRect(cx - 1, cy + 1, 2, 1, col);
+            drawRect(cx - 4, cy - 1, 8, 1, col);
+            drawRect(cx - 3, cy, 6, 1, col);
+            drawRect(cx - 2, cy + 1, 4, 1, col);
+            drawRect(cx - 1, cy + 2, 2, 1, col);
         } else if (arrowDir === 'left') {
-            drawRect(cx - 2, cy - 1, 1, 2, col);
-            drawRect(cx - 1, cy - 2, 1, 4, col);
-            drawRect(cx, cy - 3, 1, 6, col);
+            drawRect(cx - 4, cy - 1, 1, 2, col);
+            drawRect(cx - 3, cy - 2, 1, 4, col);
+            drawRect(cx - 2, cy - 3, 1, 6, col);
+            drawRect(cx - 1, cy - 4, 1, 8, col);
         } else if (arrowDir === 'right') {
-            drawRect(cx + 1, cy - 1, 1, 2, col);
-            drawRect(cx, cy - 2, 1, 4, col);
-            drawRect(cx - 1, cy - 3, 1, 6, col);
+            drawRect(cx + 3, cy - 1, 1, 2, col);
+            drawRect(cx + 2, cy - 2, 1, 4, col);
+            drawRect(cx + 1, cy - 3, 1, 6, col);
+            drawRect(cx, cy - 4, 1, 8, col);
         }
     }
 
@@ -311,7 +314,7 @@ function drawDpad() {
     drawBtn(DPAD.right, dpadRight, 'right');
 
     // Center decoration
-    drawRect(DPAD.cx - 4, DPAD.cy - 4, 8, 8, '#222222');
+    drawRect(DPAD.cx - 5, DPAD.cy - 5, 10, 10, '#222222');
 
     bctx.globalAlpha = 1;
 }
