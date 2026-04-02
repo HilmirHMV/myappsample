@@ -183,9 +183,10 @@ function updateBike() {
     }
 
     // Score & speed increase
+    const baseSpeed = 1.0 + score / 300;
+    bikeSpeed = invulnTimer > 0 ? baseSpeed + 2.5 : baseSpeed;
     bikeScroll += bikeSpeed;
     score = Math.floor(bikeScroll / 8);
-    bikeSpeed = 1.0 + score / 300;
 
     // Spawn obstacles
     bikeNextSpawn--;
@@ -276,7 +277,6 @@ function updateBike() {
                 ob.destroyed = true;
                 spawnParticles(ob.x + 6, ob.y + 10, ob.color, 12, 4);
                 spawnParticles(ob.x + 6, ob.y + 10, '#ffcc00', 6, 3);
-                score += 30;
                 screenShake = 4;
             } else {
                 b.alive = false; b.deathTimer = 0;
@@ -295,7 +295,6 @@ function updateBike() {
                 f.destroyed = true;
                 spawnParticles(f.x + 5, f.y + 3, PAL.fishBody, 10, 4);
                 spawnParticles(f.x + 5, f.y + 3, '#ffcc00', 6, 3);
-                score += 20;
                 screenShake = 3;
             } else {
                 b.alive = false; b.deathTimer = 0;
