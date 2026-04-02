@@ -153,13 +153,24 @@ function updateBike() {
         if (b.deathTimer > 60) {
             state = 'dead';
             if (score > bikeHighScore) { bikeHighScore = score; localStorage.setItem('bikeHighScore', bikeHighScore); }
-            overlay.innerHTML = `
-                <h1 style="color:#ff4444">WIPEOUT!</h1>
-                <p>Level: ${level} | Distance: ${score}</p>
-                <p>Best: ${bikeHighScore}</p>
-                <p class="blink" style="margin-top:16px">Press ENTER or tap to retry</p>
-                <p style="font-size:11px;color:#555;margin-top:8px">ESC for mode select</p>
-            `;
+            overlay.textContent = '';
+            const h = document.createElement('h1');
+            h.style.color = '#ff4444';
+            h.textContent = 'WIPEOUT!';
+            const pStats = document.createElement('p');
+            pStats.textContent = `Level: ${level} | Distance: ${score}`;
+            const pBest = document.createElement('p');
+            pBest.textContent = `Best: ${bikeHighScore}`;
+            const pRetry = document.createElement('p');
+            pRetry.className = 'blink';
+            pRetry.style.marginTop = '16px';
+            pRetry.textContent = 'Press ENTER or tap to retry';
+            const pEsc = document.createElement('p');
+            pEsc.style.fontSize = '11px';
+            pEsc.style.color = '#555';
+            pEsc.style.marginTop = '8px';
+            pEsc.textContent = 'ESC for mode select';
+            overlay.append(h, pStats, pBest, pRetry, pEsc);
             overlay.classList.remove('hidden');
         }
         return;
