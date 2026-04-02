@@ -20,6 +20,45 @@ let bikeChocoTimer = 0;
 let bikeHighScore = parseInt(localStorage.getItem('bikeHighScore') || '0');
 let bikeLanes = [];
 
+// ── Level system ──
+let level = 1;
+let levelScroll = 0;          // distance traveled in current level
+let levelComplete = false;     // true during level transition
+let levelCompleteTimer = 0;    // countdown for transition pause
+const LEVEL_TRANSITION_TIME = 90; // ~1.5 seconds at 60fps
+
+function levelDistance(lvl) {
+    return 150 + lvl * 50; // level 1 = 200, level 2 = 250, etc.
+}
+
+// Difficulty scaling per level
+function levelCarSpawnRate() {
+    return Math.max(18, 80 - level * 7);
+}
+function levelFishSpawnRate() {
+    return Math.max(30, 120 - level * 10);
+}
+function levelChocoSpawnRate() {
+    return Math.max(100, 200 + level * 15);
+}
+function levelBaseSpeed() {
+    return 1.0 + level * 0.15;
+}
+
+// Road theme palettes per level (cycles)
+const ROAD_THEMES = [
+    { road: '#555555', grass: '#44aa44', grassDark: '#3d9a3d', grassLight: '#55bb55', sky: '#88bbdd', edge: '#888888', dash: '#cccccc' },
+    { road: '#444455', grass: '#338833', grassDark: '#2d7a2d', grassLight: '#44aa44', sky: '#667799', edge: '#777788', dash: '#aaaacc' },
+    { road: '#665544', grass: '#aa8833', grassDark: '#997722', grassLight: '#bbaa44', sky: '#dd9955', edge: '#887766', dash: '#ddccaa' },
+    { road: '#333344', grass: '#225533', grassDark: '#1a4428', grassLight: '#336644', sky: '#223355', edge: '#555566', dash: '#8888aa' },
+    { road: '#554444', grass: '#cc5533', grassDark: '#aa4422', grassLight: '#dd7744', sky: '#cc7744', edge: '#776655', dash: '#ddbbaa' },
+    { road: '#3a3a4a', grass: '#4488aa', grassDark: '#337799', grassLight: '#55aacc', sky: '#445577', edge: '#6677aa', dash: '#aabbdd' },
+];
+
+function currentTheme() {
+    return ROAD_THEMES[(level - 1) % ROAD_THEMES.length];
+}
+
 // ── Start bike mode ──
 function startBikeMode() {
     const roadW = ROAD_RIGHT - ROAD_LEFT;
@@ -45,6 +84,10 @@ function startBikeMode() {
     bikeNextSpawn = 60;
     bikeFishTimer = 120;
     bikeChocoTimer = 80;
+    level = 1;
+    levelScroll = 0;
+    levelComplete = false;
+    levelCompleteTimer = 0;
 }
 
 // ── Spawners ──
@@ -112,7 +155,7 @@ function updateBike() {
             if (score > bikeHighScore) { bikeHighScore = score; localStorage.setItem('bikeHighScore', bikeHighScore); }
             overlay.innerHTML = `
                 <h1 style="color:#ff4444">WIPEOUT!</h1>
-                <p>Distance: ${score}</p>
+                <p>Level: ${level} | Distance: ${score}</p>
                 <p>Best: ${bikeHighScore}</p>
                 <p class="blink" style="margin-top:16px">Press ENTER or tap to retry</p>
                 <p style="font-size:11px;color:#555;margin-top:8px">ESC for mode select</p>
@@ -182,30 +225,64 @@ function updateBike() {
         b.pedalFrame = 1 - b.pedalFrame;
     }
 
+    // Level transition pause
+    if (levelComplete) {
+        levelCompleteTimer--;
+        // Slow scroll during transition
+        bikeScroll += 0.3;
+        score = Math.floor(bikeScroll / 8);
+        // Clear enemies during transition
+        bikeObstacles = bikeObstacles.filter(ob => { ob.y += ob.vy; return ob.y > -40 && ob.y < H + 40; });
+        bikeFish = bikeFish.filter(f => { f.x += f.vx; return f.x > -20 && f.x < W + 20; });
+        bikeChocolates = [];
+        if (levelCompleteTimer <= 0) {
+            levelComplete = false;
+            levelScroll = 0;
+        }
+        updateParticles();
+        decayScreenShake();
+        return;
+    }
+
     // Score & speed increase
-    const baseSpeed = 1.0 + score / 300;
+    const baseSpeed = levelBaseSpeed() + score / 500;
     bikeSpeed = invulnTimer > 0 ? baseSpeed + 2.5 : baseSpeed;
     bikeScroll += bikeSpeed;
+    levelScroll += bikeSpeed;
     score = Math.floor(bikeScroll / 8);
 
-    // Spawn obstacles
+    // Check level completion
+    const needed = levelDistance(level);
+    if (levelScroll / 8 >= needed) {
+        level++;
+        levelComplete = true;
+        levelCompleteTimer = LEVEL_TRANSITION_TIME;
+        screenShake = 3;
+        // Celebration particles
+        for (let i = 0; i < 5; i++) {
+            spawnParticles(W / 2 + (Math.random() - 0.5) * 80, H / 2 + (Math.random() - 0.5) * 40, '#ffcc00', 6, 3);
+            spawnParticles(W / 2 + (Math.random() - 0.5) * 80, H / 2 + (Math.random() - 0.5) * 40, '#44ff44', 4, 2);
+        }
+    }
+
+    // Spawn obstacles (scaled by level)
     bikeNextSpawn--;
     if (bikeNextSpawn <= 0) {
         spawnCarObstacle();
-        bikeNextSpawn = Math.max(25, 80 - score / 5);
-        if (score > 100 && Math.random() < 0.3) spawnCarObstacle();
+        bikeNextSpawn = levelCarSpawnRate();
+        if (level >= 3 && Math.random() < 0.3) spawnCarObstacle();
     }
 
     bikeFishTimer--;
     if (bikeFishTimer <= 0) {
         spawnBikeFish();
-        bikeFishTimer = Math.max(40, 120 - score / 4);
+        bikeFishTimer = levelFishSpawnRate();
     }
 
     bikeChocoTimer--;
     if (bikeChocoTimer <= 0) {
         spawnBikeChocolate();
-        bikeChocoTimer = Math.max(80, 200 - score / 6);
+        bikeChocoTimer = levelChocoSpawnRate();
     }
 
     // Update cars (with lane-change avoidance)
@@ -323,27 +400,29 @@ function updateBike() {
 // ── Bike drawing ──
 
 function drawBikeRoad() {
-    bctx.fillStyle = '#88bbdd';
+    const t = currentTheme();
+
+    bctx.fillStyle = t.sky;
     bctx.fillRect(0, 0, W, H);
 
-    bctx.fillStyle = '#44aa44';
+    bctx.fillStyle = t.grass;
     bctx.fillRect(0, 0, ROAD_LEFT, H);
     bctx.fillRect(ROAD_RIGHT, 0, W - ROAD_RIGHT, H);
 
     const grassScroll = (bikeScroll * 0.6) % 8;
     for (let gy = -8; gy < H; gy += 8) {
         const ry = gy + grassScroll;
-        drawPixel(5, ry, '#3d9a3d');
-        drawPixel(18, ry + 3, '#55bb55');
-        drawPixel(W - 10, ry + 1, '#3d9a3d');
-        drawPixel(W - 22, ry + 5, '#55bb55');
+        drawPixel(5, ry, t.grassDark);
+        drawPixel(18, ry + 3, t.grassLight);
+        drawPixel(W - 10, ry + 1, t.grassDark);
+        drawPixel(W - 22, ry + 5, t.grassLight);
     }
 
-    bctx.fillStyle = '#555555';
+    bctx.fillStyle = t.road;
     bctx.fillRect(ROAD_LEFT, 0, ROAD_RIGHT - ROAD_LEFT, H);
 
-    drawRect(ROAD_LEFT, 0, 2, H, '#888888');
-    drawRect(ROAD_RIGHT - 2, 0, 2, H, '#888888');
+    drawRect(ROAD_LEFT, 0, 2, H, t.edge);
+    drawRect(ROAD_RIGHT - 2, 0, 2, H, t.edge);
 
     const dashLen = 12;
     const gapLen = 10;
@@ -352,7 +431,7 @@ function drawBikeRoad() {
     for (let li = 1; li < 4; li++) {
         const lx = ROAD_LEFT + (ROAD_RIGHT - ROAD_LEFT) * li / 4;
         for (let dy = -dashLen + dashOffset; dy < H + dashLen; dy += totalDash) {
-            drawRect(lx - 1, dy, 2, dashLen, '#cccccc');
+            drawRect(lx - 1, dy, 2, dashLen, t.dash);
         }
     }
 }
@@ -477,16 +556,36 @@ function renderBike() {
     bctx.fillStyle = '#fff';
     bctx.font = '8px monospace';
     bctx.textAlign = 'left';
-    bctx.fillText('DIST: ' + score, 4, 10);
+    bctx.fillText('LVL ' + level, 4, 10);
+    bctx.textAlign = 'center';
+    bctx.fillText('DIST: ' + score, W / 2, 10);
     bctx.textAlign = 'right';
     bctx.fillText('BEST: ' + bikeHighScore, W - 4, 10);
     bctx.textAlign = 'left';
 
-    const spdW = 30;
-    drawRect(4, 14, spdW, 4, '#333');
-    const spdFill = clamp((bikeSpeed - 1) / 3, 0, 1);
-    const spdColor = spdFill < 0.5 ? '#44ff44' : spdFill < 0.8 ? '#ffcc00' : '#ff4444';
-    drawRect(4, 14, Math.floor(spdFill * spdW), 4, spdColor);
+    // Level progress bar
+    const barW = 40;
+    drawRect(4, 14, barW, 4, '#333');
+    const needed = levelDistance(level);
+    const lvlFill = clamp((levelScroll / 8) / needed, 0, 1);
+    const lvlColor = lvlFill < 0.5 ? '#44bbff' : lvlFill < 0.8 ? '#44ff44' : '#ffcc00';
+    drawRect(4, 14, Math.floor(lvlFill * barW), 4, lvlColor);
+
+    // Level complete banner
+    if (levelComplete) {
+        const bannerY = H / 2 - 12;
+        drawRect(0, bannerY, W, 24, '#000000');
+        bctx.globalAlpha = 0.7;
+        drawRect(0, bannerY, W, 24, '#000000');
+        bctx.globalAlpha = 1;
+        bctx.fillStyle = '#ffcc00';
+        bctx.font = '8px monospace';
+        bctx.textAlign = 'center';
+        bctx.fillText('LEVEL ' + (level - 1) + ' COMPLETE!', W / 2, bannerY + 11);
+        bctx.fillStyle = '#aaaaaa';
+        bctx.fillText('Level ' + level + ' starting...', W / 2, bannerY + 20);
+        bctx.textAlign = 'left';
+    }
 
     bctx.restore();
 
