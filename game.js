@@ -52,8 +52,9 @@ document.addEventListener('keyup', e => { keys[e.code] = false; });
 
 function updateTouchFromEvent(e) {
     touchLeft = false; touchRight = false; touchUp = false; touchDown = false;
-    for (const t of e.touches) {
-        const rect = canvas.getBoundingClientRect();
+    const rect = canvas.getBoundingClientRect();
+    for (let i = 0; i < e.touches.length; i++) {
+        const t = e.touches[i];
         const x = (t.clientX - rect.left) / rect.width;
         const y = (t.clientY - rect.top) / rect.height;
         if (x < 0.33) touchLeft = true;
@@ -63,19 +64,25 @@ function updateTouchFromEvent(e) {
     }
 }
 
-canvas.addEventListener('touchstart', e => {
+function handleTouchStart(e) {
     e.preventDefault();
     if (state === 'title' || state === 'dead') { startGame(); return; }
     updateTouchFromEvent(e);
-});
-canvas.addEventListener('touchmove', e => {
+}
+function handleTouchMove(e) {
     e.preventDefault();
     updateTouchFromEvent(e);
-});
-canvas.addEventListener('touchend', e => {
+}
+function handleTouchEnd(e) {
     e.preventDefault();
     touchLeft = false; touchRight = false; touchUp = false; touchDown = false;
-});
+}
+
+// Use { passive: false } for Safari compatibility
+document.addEventListener('touchstart', handleTouchStart, { passive: false });
+document.addEventListener('touchmove', handleTouchMove, { passive: false });
+document.addEventListener('touchend', handleTouchEnd, { passive: false });
+document.addEventListener('touchcancel', handleTouchEnd, { passive: false });
 document.addEventListener('click', () => {
     if (state === 'title' || state === 'dead') startGame();
 });
