@@ -17,7 +17,8 @@ let bikeChocolates = [];
 let bikeNextSpawn = 0;
 let bikeFishTimer = 0;
 let bikeChocoTimer = 0;
-let bikeHighScore = parseInt(localStorage.getItem('bikeHighScore') || '0');
+let bikeHighScore = 0;
+try { bikeHighScore = parseInt(localStorage.getItem('bikeHighScore') || '0'); } catch (e) { /* localStorage unavailable */ }
 let bikeLanes = [];
 
 // ── Level system ──
@@ -152,7 +153,7 @@ function updateBike() {
         b.deathTimer++;
         if (b.deathTimer > 60) {
             state = 'dead';
-            if (score > bikeHighScore) { bikeHighScore = score; localStorage.setItem('bikeHighScore', bikeHighScore); }
+            if (score > bikeHighScore) { bikeHighScore = score; try { localStorage.setItem('bikeHighScore', bikeHighScore); } catch (e) { /* localStorage unavailable */ } }
             overlay.innerHTML = `
                 <h1 style="color:#ff4444">WIPEOUT!</h1>
                 <p>Level: ${level} | Distance: ${score}</p>
