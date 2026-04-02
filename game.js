@@ -41,8 +41,56 @@ const seededRandom = (function() {
 // ── Input ──
 const keys = {};
 let touchActive = false;
-let touchGameX = 0; // touch position in game coords (0..W)
-let touchGameY = 0; // touch position in game coords (0..H)
+let touchGameX = 0;
+let touchGameY = 0;
+
+// ── D-pad state (on-screen arrows for mobile) ──
+let dpadUp = false, dpadDown = false, dpadLeft = false, dpadRight = false;
+let isMobile = false;
+
+// Detect mobile on first touch
+function enableMobile() {
+    if (!isMobile) isMobile = true;
+}
+
+// D-pad layout (in game coords, bottom-right corner)
+const DPAD = {
+    cx: W - 22,      // center x
+    cy: H - 22,      // center y
+    btnSize: 12,      // button size
+    gap: 1,           // gap between buttons
+};
+// Computed button rects (set once)
+DPAD.up    = { x: DPAD.cx - 6, y: DPAD.cy - 19, w: 12, h: 12 };
+DPAD.down  = { x: DPAD.cx - 6, y: DPAD.cy + 7,  w: 12, h: 12 };
+DPAD.left  = { x: DPAD.cx - 19, y: DPAD.cy - 6, w: 12, h: 12 };
+DPAD.right = { x: DPAD.cx + 7,  y: DPAD.cy - 6, w: 12, h: 12 };
+
+function pointInRect(px, py, r) {
+    return px >= r.x && px < r.x + r.w && py >= r.y && py < r.y + r.h;
+}
+
+function updateDpadFromTouches(e) {
+    dpadUp = false; dpadDown = false; dpadLeft = false; dpadRight = false;
+    touchActive = false;
+    const rect = canvas.getBoundingClientRect();
+    for (let i = 0; i < e.touches.length; i++) {
+        const t = e.touches[i];
+        const gx = ((t.clientX - rect.left) / rect.width) * W;
+        const gy = ((t.clientY - rect.top) / rect.height) * H;
+
+        // Check if touch is on any d-pad button
+        if (pointInRect(gx, gy, DPAD.up))    { dpadUp = true; continue; }
+        if (pointInRect(gx, gy, DPAD.down))  { dpadDown = true; continue; }
+        if (pointInRect(gx, gy, DPAD.left))  { dpadLeft = true; continue; }
+        if (pointInRect(gx, gy, DPAD.right)) { dpadRight = true; continue; }
+
+        // Not on d-pad — use as direct touch position
+        touchActive = true;
+        touchGameX = gx;
+        touchGameY = gy;
+    }
+}
 
 document.addEventListener('keydown', e => {
     keys[e.code] = true;
@@ -52,28 +100,24 @@ document.addEventListener('keydown', e => {
 });
 document.addEventListener('keyup', e => { keys[e.code] = false; });
 
-function updateTouchFromEvent(e) {
-    if (e.touches.length === 0) { touchActive = false; return; }
-    touchActive = true;
-    const rect = canvas.getBoundingClientRect();
-    // Use the first touch — convert screen position to game coordinates
-    const t = e.touches[0];
-    touchGameX = ((t.clientX - rect.left) / rect.width) * W;
-    touchGameY = ((t.clientY - rect.top) / rect.height) * H;
-}
-
 function handleTouchStart(e) {
     e.preventDefault();
+    enableMobile();
     if (state === 'title' || state === 'dead') { startGame(); return; }
-    updateTouchFromEvent(e);
+    updateDpadFromTouches(e);
 }
 function handleTouchMove(e) {
     e.preventDefault();
-    updateTouchFromEvent(e);
+    updateDpadFromTouches(e);
 }
 function handleTouchEnd(e) {
     e.preventDefault();
-    touchActive = false;
+    if (e.touches.length === 0) {
+        touchActive = false;
+        dpadUp = false; dpadDown = false; dpadLeft = false; dpadRight = false;
+    } else {
+        updateDpadFromTouches(e);
+    }
 }
 
 // Use { passive: false } for Safari compatibility
@@ -225,6 +269,53 @@ function lightenColor(hex) {
 }
 
 // ── Blit to main canvas ──
+// ── Draw on-screen d-pad (mobile only) ──
+function drawDpad() {
+    if (!isMobile) return;
+
+    bctx.globalAlpha = 0.35;
+
+    // Draw button helper
+    function drawBtn(r, active, arrowDir) {
+        const col = active ? '#ffffff' : '#aaaaaa';
+        drawRect(r.x, r.y, r.w, r.h, '#222222');
+        drawRect(r.x + 1, r.y + 1, r.w - 2, r.h - 2, active ? '#555555' : '#333333');
+
+        // Arrow glyph
+        const cx = r.x + r.w / 2;
+        const cy = r.y + r.h / 2;
+        bctx.fillStyle = col;
+        if (arrowDir === 'up') {
+            // Triangle pointing up
+            drawRect(cx - 1, cy - 2, 2, 1, col);
+            drawRect(cx - 2, cy - 1, 4, 1, col);
+            drawRect(cx - 3, cy, 6, 1, col);
+        } else if (arrowDir === 'down') {
+            drawRect(cx - 3, cy - 1, 6, 1, col);
+            drawRect(cx - 2, cy, 4, 1, col);
+            drawRect(cx - 1, cy + 1, 2, 1, col);
+        } else if (arrowDir === 'left') {
+            drawRect(cx - 2, cy - 1, 1, 2, col);
+            drawRect(cx - 1, cy - 2, 1, 4, col);
+            drawRect(cx, cy - 3, 1, 6, col);
+        } else if (arrowDir === 'right') {
+            drawRect(cx + 1, cy - 1, 1, 2, col);
+            drawRect(cx, cy - 2, 1, 4, col);
+            drawRect(cx - 1, cy - 3, 1, 6, col);
+        }
+    }
+
+    drawBtn(DPAD.up, dpadUp, 'up');
+    drawBtn(DPAD.down, dpadDown, 'down');
+    drawBtn(DPAD.left, dpadLeft, 'left');
+    drawBtn(DPAD.right, dpadRight, 'right');
+
+    // Center decoration
+    drawRect(DPAD.cx - 4, DPAD.cy - 4, 8, 8, '#222222');
+
+    bctx.globalAlpha = 1;
+}
+
 function blitToScreen() {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     ctx.drawImage(buf, 0, 0, W, H, 0, 0, canvas.width, canvas.height);

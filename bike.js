@@ -122,24 +122,28 @@ function updateBike() {
         return;
     }
 
-    // Input: keyboard lane switching (left/right)
-    const dir = inputDir();
+    // Input: combine keyboard + dpad
+    let moveLeft = keys['ArrowLeft'] || keys['KeyA'] || dpadLeft;
+    let moveRight = keys['ArrowRight'] || keys['KeyD'] || dpadRight;
+    let moveUp = keys['ArrowUp'] || keys['KeyW'] || dpadUp;
+    let moveDown = keys['ArrowDown'] || keys['KeyS'] || dpadDown;
+
+    // Lane switching (keyboard & dpad — tap to switch)
+    const dir = (moveLeft ? -1 : 0) + (moveRight ? 1 : 0);
     if (dir < 0 && !b._movedLeft) {
         b.lane = Math.max(0, b.lane - 1);
         b._movedLeft = true;
-    } else if (dir >= 0) { b._movedLeft = false; }
+    } else if (!moveLeft) { b._movedLeft = false; }
     if (dir > 0 && !b._movedRight) {
         b.lane = Math.min(3, b.lane + 1);
         b._movedRight = true;
-    } else if (dir <= 0) { b._movedRight = false; }
+    } else if (!moveRight) { b._movedRight = false; }
 
-    // Input: keyboard vertical movement
-    const goUp = keys['ArrowUp'] || keys['KeyW'];
-    const goDown = keys['ArrowDown'] || keys['KeyS'];
-    if (goUp) b.y -= 2.5;
-    if (goDown) b.y += 2.5;
+    // Vertical movement (keyboard & dpad)
+    if (moveUp) b.y -= 2.5;
+    if (moveDown) b.y += 2.5;
 
-    // Touch: move biker toward touch point
+    // Touch drag: move biker toward touch point (non-dpad touches)
     if (touchActive) {
         const bikerCenterX = b.x + b.w / 2;
         const bikerCenterY = b.y + b.h / 2;
@@ -164,7 +168,7 @@ function updateBike() {
     b.y = clamp(b.y, 16, H - 20);
     b.x = clamp(b.x, ROAD_LEFT + 2, ROAD_RIGHT - b.w - 2);
 
-    // Smooth horizontal movement to lane (keyboard only, touch overrides directly)
+    // Smooth horizontal snap to lane (when not dragging)
     if (!touchActive) {
         const targetX = bikeLanes[b.lane] - 5;
         b.x = lerp(b.x, targetX, 0.18);
@@ -487,5 +491,6 @@ function renderBike() {
 
     bctx.restore();
 
+    drawDpad();
     blitToScreen();
 }
