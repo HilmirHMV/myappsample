@@ -1,4 +1,4 @@
-// ── Bike Dash ── Game Engine ──
+// ── Orri vs umferðin ── Game Engine ──
 
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');

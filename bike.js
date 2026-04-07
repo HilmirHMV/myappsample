@@ -1,4 +1,4 @@
-// ── Bike Dash Mode ──
+// ── Orri vs umferðin Mode ──
 
 const ROAD_LEFT = 32;
 const ROAD_RIGHT = W - 32;
