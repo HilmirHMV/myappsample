@@ -3,6 +3,28 @@
 const ROAD_LEFT = 32;
 const ROAD_RIGHT = W - 32;
 
+// ── Gameplay constants ──
+const DEATH_TIMER_FRAMES = 60;
+const DEATH_BLINK_FRAMES = 30;
+const INVULN_DURATION = 180;          // ~3 seconds at 60fps
+const INVULN_SPEED_BONUS = 2.5;
+const CAR_SPEED_UP = 0.8;             // cars moving against traffic
+const CAR_SPEED_DOWN = 1.5;           // cars moving with traffic
+const TRUCK_SPEED_DOWN = 1.2;         // trucks are slower than cars
+const CHOCO_SPEED = 1.2;
+const VERT_MOVE_SPEED = 2.5;
+const COLLISION_PAD_X = 1;
+const COLLISION_PAD_Y = 2;
+const COLLISION_PAD_W = 2;
+const COLLISION_PAD_H = 2;
+const LANE_CHANGE_COOLDOWN = 60;
+const LANE_CHANGE_PROXIMITY = 30;
+const CAR_BLOCKING_DIST = 40;
+const SCORE_DIVISOR = 8;
+const INITIAL_SPAWN_CAR = 60;
+const INITIAL_SPAWN_FISH = 120;
+const INITIAL_SPAWN_CHOCO = 80;
+
 // ── Bike state ──
 let bike = {
     x: W / 2 - 5, y: H - 40, lane: 1,
@@ -17,7 +39,12 @@ let bikeChocolates = [];
 let bikeNextSpawn = 0;
 let bikeFishTimer = 0;
 let bikeChocoTimer = 0;
-let bikeHighScore = parseInt(localStorage.getItem('bikeHighScore') || '0');
+let bikeHighScore = 0;
+try {
+    bikeHighScore = parseInt(localStorage.getItem('bikeHighScore') || '0');
+} catch (e) {
+    // localStorage unavailable (private browsing) — high score won't persist
+}
 let bikeLanes = [];
 
 // ── Near-miss system ──
@@ -86,9 +113,9 @@ function startBikeMode() {
     bikeObstacles = [];
     bikeFish = [];
     bikeChocolates = [];
-    bikeNextSpawn = 60;
-    bikeFishTimer = 120;
-    bikeChocoTimer = 80;
+    bikeNextSpawn = INITIAL_SPAWN_CAR;
+    bikeFishTimer = INITIAL_SPAWN_FISH;
+    bikeChocoTimer = INITIAL_SPAWN_CHOCO;
     level = 1;
     levelScroll = 0;
     levelComplete = false;
@@ -117,7 +144,7 @@ function spawnCarObstacle() {
     bikeObstacles.push({
         x: lx - (isTruck ? 7 : 6), y: goingUp ? H + 20 : -24,
         w: isTruck ? 14 : 12, h: isTruck ? 24 : 20,
-        vy: goingUp ? -0.8 * bikeSpeed : (isTruck ? 1.2 : 1.5) * bikeSpeed,
+        vy: goingUp ? -CAR_SPEED_UP * bikeSpeed : (isTruck ? TRUCK_SPEED_DOWN : CAR_SPEED_DOWN) * bikeSpeed,
         color, type: isTruck ? 'truck' : 'car',
         lane, laneChangeTimer: 0,
         nearMissed: false
@@ -144,7 +171,7 @@ function spawnBikeChocolate() {
     bikeChocolates.push({
         x: lx - 5, y: -12,
         w: 10, h: 8,
-        vy: 1.2 * bikeSpeed,
+        vy: CHOCO_SPEED * bikeSpeed,
         collected: false, animTimer: 0
     });
 }
@@ -207,17 +234,30 @@ function updateBike() {
 
     if (!b.alive) {
         b.deathTimer++;
-        if (b.deathTimer > 60) {
+        if (b.deathTimer > DEATH_TIMER_FRAMES) {
             state = 'dead';
             stopMusic();
-            if (score > bikeHighScore) { bikeHighScore = score; localStorage.setItem('bikeHighScore', bikeHighScore); }
-            overlay.innerHTML = `
-                <h1 style="color:#ff4444">WIPEOUT!</h1>
-                <p>Level: ${level} | Distance: ${score}</p>
-                <p>Best: ${bikeHighScore}</p>
-                <p class="blink" style="margin-top:16px">Press ENTER or tap to retry</p>
-                <p style="font-size:11px;color:#555;margin-top:8px">ESC for mode select</p>
-            `;
+            if (score > bikeHighScore) {
+                bikeHighScore = score;
+                try {
+                    localStorage.setItem('bikeHighScore', bikeHighScore);
+                } catch (e) {
+                    // localStorage unavailable — high score won't persist
+                }
+            }
+            overlay.textContent = '';
+            const h = document.createElement('h1');
+            h.style.color = '#ff4444';
+            h.textContent = 'WIPEOUT!';
+            const pStats = document.createElement('p');
+            pStats.textContent = `Level: ${level} | Distance: ${score}`;
+            const pBest = document.createElement('p');
+            pBest.textContent = `Best: ${bikeHighScore}`;
+            const pRetry = document.createElement('p');
+            pRetry.className = 'blink';
+            pRetry.style.marginTop = '16px';
+            pRetry.textContent = 'Press ENTER or tap to retry';
+            overlay.append(h, pStats, pBest, pRetry);
             overlay.classList.remove('hidden');
         }
         return;
@@ -243,8 +283,8 @@ function updateBike() {
         b._movedRight = true;
     } else if (!moveRight) { b._movedRight = false; }
 
-    if (moveUp) b.y -= 2.5;
-    if (moveDown) b.y += 2.5;
+    if (moveUp) b.y -= VERT_MOVE_SPEED;
+    if (moveDown) b.y += VERT_MOVE_SPEED;
 
     if (touchActive) {
         const bikerCenterX = b.x + b.w / 2;
@@ -286,7 +326,7 @@ function updateBike() {
         levelCompleteTimer--;
         levelFlash = Math.max(0, levelFlash - 1);
         bikeScroll += 0.3;
-        score = Math.floor(bikeScroll / 8);
+        score = Math.floor(bikeScroll / SCORE_DIVISOR);
         bikeObstacles = bikeObstacles.filter(ob => { ob.y += ob.vy; return ob.y > -40 && ob.y < H + 40; });
         bikeFish = bikeFish.filter(f => { f.x += f.vx; return f.x > -20 && f.x < W + 20; });
         bikeChocolates = [];
@@ -303,10 +343,10 @@ function updateBike() {
 
     // Score & speed
     const baseSpeed = levelBaseSpeed() + score / 500;
-    bikeSpeed = invulnTimer > 0 ? baseSpeed + 2.5 : baseSpeed;
+    bikeSpeed = invulnTimer > 0 ? baseSpeed + INVULN_SPEED_BONUS : baseSpeed;
     bikeScroll += bikeSpeed;
     levelScroll += bikeSpeed;
-    score = Math.floor(bikeScroll / 8);
+    score = Math.floor(bikeScroll / SCORE_DIVISOR);
 
     // Update scenery parallax
     updateScenery(bikeSpeed);
@@ -330,7 +370,7 @@ function updateBike() {
 
     // Level completion
     const needed = levelDistance(level);
-    if (levelScroll / 8 >= needed) {
+    if (levelScroll / SCORE_DIVISOR >= needed) {
         level++;
         levelComplete = true;
         levelCompleteTimer = LEVEL_TRANSITION_TIME;
@@ -373,8 +413,8 @@ function updateBike() {
         for (const other of bikeObstacles) {
             if (other === ob || other.lane !== ob.lane) continue;
             const dy = other.y - ob.y;
-            if (ob.vy > 0 && dy > 0 && dy < 40) blocked = true;
-            if (ob.vy < 0 && dy < 0 && dy > -40) blocked = true;
+            if (ob.vy > 0 && dy > 0 && dy < CAR_BLOCKING_DIST) blocked = true;
+            if (ob.vy < 0 && dy < 0 && dy > -CAR_BLOCKING_DIST) blocked = true;
         }
 
         if (blocked && ob.laneChangeTimer <= 0) {
@@ -385,11 +425,11 @@ function updateBike() {
                 let laneFree = true;
                 for (const other of bikeObstacles) {
                     if (other === ob || other.lane !== nl) continue;
-                    if (Math.abs(other.y - ob.y) < 30) { laneFree = false; break; }
+                    if (Math.abs(other.y - ob.y) < LANE_CHANGE_PROXIMITY) { laneFree = false; break; }
                 }
                 if (laneFree) {
                     ob.lane = nl;
-                    ob.laneChangeTimer = 60;
+                    ob.laneChangeTimer = LANE_CHANGE_COOLDOWN;
                     break;
                 }
             }
@@ -421,11 +461,11 @@ function updateBike() {
     if (invulnTimer > 0) invulnTimer--;
 
     // Near-miss check (before collision, so we detect near misses on the same frame)
-    const bNear = { x: b.x + 1, y: b.y + 2, w: b.w - 2, h: b.h - 2 };
+    const bNear = { x: b.x + COLLISION_PAD_X, y: b.y + COLLISION_PAD_Y, w: b.w - COLLISION_PAD_W, h: b.h - COLLISION_PAD_H };
     checkNearMiss(bNear);
 
     // Collision
-    const bHit = { x: b.x + 1, y: b.y + 2, w: b.w - 2, h: b.h - 2 };
+    const bHit = { x: b.x + COLLISION_PAD_X, y: b.y + COLLISION_PAD_Y, w: b.w - COLLISION_PAD_W, h: b.h - COLLISION_PAD_H };
 
     for (const ob of bikeObstacles) {
         if (aabb(bHit, ob)) {
@@ -469,7 +509,7 @@ function updateBike() {
     for (const ch of bikeChocolates) {
         if (!ch.collected && aabb(bHit, ch)) {
             ch.collected = true;
-            invulnTimer = 180;
+            invulnTimer = INVULN_DURATION;
             screenShake = 3;
             spawnParticles(ch.x + 5, ch.y + 4, '#ffcc00', 12, 4);
             spawnParticles(ch.x + 5, ch.y + 4, PAL.choco, 8, 3);
@@ -671,7 +711,7 @@ function renderBike() {
 
     if (bike.alive) {
         drawBiker(bike.x, bike.y);
-    } else if (bike.deathTimer < 30) {
+    } else if (bike.deathTimer < DEATH_BLINK_FRAMES) {
         if (bike.deathTimer % 4 < 2) drawBiker(bike.x, bike.y);
     }
 
@@ -706,14 +746,14 @@ function renderBike() {
     drawRect(4, 14, barW, 4, '#222');
     drawRect(4, 14, barW, 1, '#444');
     const needed = levelDistance(level);
-    const lvlFill = clamp((levelScroll / 8) / needed, 0, 1);
+    const lvlFill = clamp((levelScroll / SCORE_DIVISOR) / needed, 0, 1);
     const lvlColor = lvlFill < 0.5 ? '#44bbff' : lvlFill < 0.8 ? '#44ff44' : '#ffcc00';
     drawRect(4, 14, Math.floor(lvlFill * barW), 4, lvlColor);
 
     // Theme name on level start
-    if (levelScroll / 8 < 30) {
+    if (levelScroll / SCORE_DIVISOR < 30) {
         const t = currentTheme();
-        bctx.globalAlpha = clamp(1 - (levelScroll / 8) / 30, 0, 1);
+        bctx.globalAlpha = clamp(1 - (levelScroll / SCORE_DIVISOR) / 30, 0, 1);
         bctx.fillStyle = '#ffffff';
         bctx.textAlign = 'center';
         bctx.fillText(t.name, W / 2, 30);

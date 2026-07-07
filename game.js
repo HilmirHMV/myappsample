@@ -132,13 +132,16 @@ function aabb(a, b) {
 let audioCtx = null;
 
 function ensureAudio() {
-    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return null; // audio unsupported (or test environment)
+    if (!audioCtx) audioCtx = new AC();
     if (audioCtx.state === 'suspended') audioCtx.resume();
     return audioCtx;
 }
 
 function playTone(freq, duration, type, vol, ramp) {
     const ac = ensureAudio();
+    if (!ac) return;
     const osc = ac.createOscillator();
     const gain = ac.createGain();
     osc.type = type || 'square';
@@ -200,12 +203,8 @@ let musicInterval = null;
 
 function startMusic() {
     if (musicPlaying) return;
+    if (!ensureAudio()) return;
     musicPlaying = true;
-    const ac = ensureAudio();
-
-    const bassGain = ac.createGain();
-    bassGain.gain.value = 0.04;
-    bassGain.connect(ac.destination);
 
     const bassNotes = [131, 131, 165, 165, 175, 175, 131, 131];
     let step = 0;
@@ -215,6 +214,7 @@ function startMusic() {
     musicInterval = setInterval(() => {
         if (state !== 'playing') return;
         const ac2 = ensureAudio();
+        if (!ac2) return;
         const now = ac2.currentTime;
 
         const bassOsc = ac2.createOscillator();
