@@ -89,6 +89,7 @@ function updateDpadFromTouches(e) {
 
 document.addEventListener('keydown', e => {
     keys[e.code] = true;
+    unlockAudio();
     if (state === 'title' || state === 'dead') startGame();
 });
 document.addEventListener('keyup', e => { keys[e.code] = false; });
@@ -96,6 +97,7 @@ document.addEventListener('keyup', e => { keys[e.code] = false; });
 function handleTouchStart(e) {
     e.preventDefault();
     enableMobile();
+    unlockAudio();
     if (state === 'title' || state === 'dead') { startGame(); return; }
     updateDpadFromTouches(e);
 }
@@ -105,6 +107,7 @@ function handleTouchMove(e) {
 }
 function handleTouchEnd(e) {
     e.preventDefault();
+    unlockAudio();
     if (e.touches.length === 0) {
         touchActive = false;
         dpadUp = false; dpadDown = false; dpadLeft = false; dpadRight = false;
@@ -118,6 +121,7 @@ document.addEventListener('touchmove', handleTouchMove, { passive: false });
 document.addEventListener('touchend', handleTouchEnd, { passive: false });
 document.addEventListener('touchcancel', handleTouchEnd, { passive: false });
 document.addEventListener('click', () => {
+    unlockAudio();
     if (state === 'title' || state === 'dead') startGame();
 });
 
@@ -135,8 +139,34 @@ function ensureAudio() {
     const AC = window.AudioContext || window.webkitAudioContext;
     if (!AC) return null; // audio unsupported (or test environment)
     if (!audioCtx) audioCtx = new AC();
-    if (audioCtx.state === 'suspended') audioCtx.resume();
+    if (audioCtx.state === 'suspended' || audioCtx.state === 'interrupted') audioCtx.resume();
     return audioCtx;
+}
+
+// iOS unlock: Web Audio is muted by the ringer silent switch unless an
+// <audio> element is playing, which flips the audio session to "playback".
+// A looping silent WAV keeps that session active. Must start inside a
+// user gesture.
+let audioUnlocked = false;
+const SILENT_WAV = 'data:audio/wav;base64,UklGRrQBAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YZABAACAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICA';
+
+function unlockAudio() {
+    ensureAudio();
+    if (audioUnlocked) return;
+    try {
+        const el = document.createElement('audio');
+        el.setAttribute('playsinline', '');
+        el.src = SILENT_WAV;
+        el.loop = true;
+        const p = el.play();
+        if (p && p.then) {
+            p.then(() => { audioUnlocked = true; }).catch(() => {});
+        } else {
+            audioUnlocked = true;
+        }
+    } catch (e) {
+        // media playback unsupported (test environment) — ignore
+    }
 }
 
 function playTone(freq, duration, type, vol, ramp) {
