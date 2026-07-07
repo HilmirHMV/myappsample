@@ -237,48 +237,73 @@ function startMusic() {
     musicPlaying = true;
 
     const bassNotes = [131, 131, 165, 165, 175, 175, 131, 131];
+    const melNotes = [523, 587, 659, 784, 659, 587, 523, 440];
+    const boostArp = [1047, 1319, 1568, 2093, 1568, 1319]; // C6-E6-G6-C7 sparkle
     let step = 0;
-    const bpm = 140;
-    const stepTime = 60 / bpm / 2;
 
-    musicInterval = setInterval(() => {
-        if (state !== 'playing') return;
-        const ac2 = ensureAudio();
-        if (!ac2) return;
-        const now = ac2.currentTime;
+    function playStep() {
+        if (!musicPlaying) return;
 
-        const bassOsc = ac2.createOscillator();
-        const bg = ac2.createGain();
-        bassOsc.type = 'square';
-        bassOsc.frequency.value = bassNotes[step % bassNotes.length];
-        bg.gain.setValueAtTime(0.04, now);
-        bg.gain.linearRampToValueAtTime(0, now + stepTime * 0.8);
-        bassOsc.connect(bg);
-        bg.connect(ac2.destination);
-        bassOsc.start(now);
-        bassOsc.stop(now + stepTime * 0.9);
+        // Boost mode: double-time, octave-up bass, denser melody, arpeggio
+        const boost = state === 'playing' && invulnTimer > 0;
+        const bpm = boost ? 210 : 140;
+        const stepTime = 60 / bpm / 2;
 
-        if (step % 4 === 0) {
-            const melNotes = [523, 587, 659, 784, 659, 587, 523, 440];
-            const melOsc = ac2.createOscillator();
-            const mg = ac2.createGain();
-            melOsc.type = 'triangle';
-            melOsc.frequency.value = melNotes[Math.floor(step / 4) % melNotes.length];
-            mg.gain.setValueAtTime(0.025, now);
-            mg.gain.linearRampToValueAtTime(0, now + stepTime * 3);
-            melOsc.connect(mg);
-            mg.connect(ac2.destination);
-            melOsc.start(now);
-            melOsc.stop(now + stepTime * 3.5);
+        if (state === 'playing') {
+            const ac = ensureAudio();
+            if (ac) {
+                const now = ac.currentTime;
+
+                const bassOsc = ac.createOscillator();
+                const bg = ac.createGain();
+                bassOsc.type = 'square';
+                const bassFreq = bassNotes[step % bassNotes.length];
+                bassOsc.frequency.value = boost ? bassFreq * 2 : bassFreq;
+                bg.gain.setValueAtTime(boost ? 0.05 : 0.04, now);
+                bg.gain.linearRampToValueAtTime(0, now + stepTime * 0.8);
+                bassOsc.connect(bg);
+                bg.connect(ac.destination);
+                bassOsc.start(now);
+                bassOsc.stop(now + stepTime * 0.9);
+
+                const melEvery = boost ? 2 : 4;
+                if (step % melEvery === 0) {
+                    const melOsc = ac.createOscillator();
+                    const mg = ac.createGain();
+                    melOsc.type = boost ? 'square' : 'triangle';
+                    melOsc.frequency.value = melNotes[Math.floor(step / melEvery) % melNotes.length];
+                    mg.gain.setValueAtTime(boost ? 0.035 : 0.025, now);
+                    mg.gain.linearRampToValueAtTime(0, now + stepTime * 3);
+                    melOsc.connect(mg);
+                    mg.connect(ac.destination);
+                    melOsc.start(now);
+                    melOsc.stop(now + stepTime * 3.5);
+                }
+
+                if (boost) {
+                    const arpOsc = ac.createOscillator();
+                    const ag = ac.createGain();
+                    arpOsc.type = 'triangle';
+                    arpOsc.frequency.value = boostArp[step % boostArp.length];
+                    ag.gain.setValueAtTime(0.02, now);
+                    ag.gain.linearRampToValueAtTime(0, now + stepTime * 0.6);
+                    arpOsc.connect(ag);
+                    ag.connect(ac.destination);
+                    arpOsc.start(now);
+                    arpOsc.stop(now + stepTime * 0.7);
+                }
+            }
         }
 
         step++;
-    }, stepTime * 1000);
+        musicInterval = setTimeout(playStep, stepTime * 1000);
+    }
+    playStep();
 }
 
 function stopMusic() {
     musicPlaying = false;
-    if (musicInterval) { clearInterval(musicInterval); musicInterval = null; }
+    if (musicInterval) { clearTimeout(musicInterval); musicInterval = null; }
 }
 
 // ── Color palette (8-bit style) ──
