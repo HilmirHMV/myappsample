@@ -144,6 +144,62 @@ function inputDir() {
     return dx;
 }
 
+// ── Audio system (8-bit style) ──
+let audioCtx = null;
+
+function ensureAudio() {
+    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+    return audioCtx;
+}
+
+function playTone(freq, duration, type, vol, ramp) {
+    const ac = ensureAudio();
+    const osc = ac.createOscillator();
+    const gain = ac.createGain();
+    osc.type = type || 'square';
+    osc.frequency.setValueAtTime(freq, ac.currentTime);
+    if (ramp) osc.frequency.linearRampToValueAtTime(ramp, ac.currentTime + duration);
+    gain.gain.setValueAtTime(vol || 0.15, ac.currentTime);
+    gain.gain.linearRampToValueAtTime(0, ac.currentTime + duration);
+    osc.connect(gain);
+    gain.connect(ac.destination);
+    osc.start(ac.currentTime);
+    osc.stop(ac.currentTime + duration);
+}
+
+const SFX = {
+    pickup() {
+        playTone(600, 0.06, 'square', 0.12);
+        setTimeout(() => playTone(900, 0.08, 'square', 0.12), 60);
+        setTimeout(() => playTone(1200, 0.1, 'square', 0.1), 130);
+    },
+    hit() {
+        playTone(200, 0.15, 'sawtooth', 0.18, 50);
+        setTimeout(() => playTone(80, 0.2, 'square', 0.15), 80);
+    },
+    death() {
+        playTone(400, 0.12, 'square', 0.18, 100);
+        setTimeout(() => playTone(200, 0.15, 'square', 0.15, 60), 120);
+        setTimeout(() => playTone(100, 0.25, 'sawtooth', 0.12, 40), 260);
+    },
+    levelUp() {
+        const notes = [523, 659, 784, 1047];
+        notes.forEach((n, i) => setTimeout(() => playTone(n, 0.12, 'square', 0.1), i * 100));
+    },
+    laneSwitch() {
+        playTone(440, 0.04, 'square', 0.06);
+    },
+    destroy() {
+        playTone(300, 0.08, 'sawtooth', 0.1, 100);
+        setTimeout(() => playTone(500, 0.06, 'square', 0.08), 50);
+    },
+    start() {
+        const notes = [262, 330, 392, 523];
+        notes.forEach((n, i) => setTimeout(() => playTone(n, 0.1, 'square', 0.08), i * 80));
+    }
+};
+
 // ── Color palette (8-bit style) ──
 const PAL = {
     fishBody: '#4488cc', fishFin: '#3366aa', fishTail: '#3366aa',
@@ -326,6 +382,8 @@ function blitToScreen() {
 
 // ── Start / Reset ──
 function startGame() {
+    ensureAudio();
+    SFX.start();
     state = 'playing';
     overlay.classList.add('hidden');
     seededRandom(Date.now() & 0xffffff);

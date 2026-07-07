@@ -174,11 +174,15 @@ function updateBike() {
     // Lane switching (keyboard & dpad — tap to switch)
     const dir = (moveLeft ? -1 : 0) + (moveRight ? 1 : 0);
     if (dir < 0 && !b._movedLeft) {
+        const prev = b.lane;
         b.lane = Math.max(0, b.lane - 1);
+        if (b.lane !== prev) SFX.laneSwitch();
         b._movedLeft = true;
     } else if (!moveLeft) { b._movedLeft = false; }
     if (dir > 0 && !b._movedRight) {
+        const prev = b.lane;
         b.lane = Math.min(3, b.lane + 1);
+        if (b.lane !== prev) SFX.laneSwitch();
         b._movedRight = true;
     } else if (!moveRight) { b._movedRight = false; }
 
@@ -258,6 +262,7 @@ function updateBike() {
         levelComplete = true;
         levelCompleteTimer = LEVEL_TRANSITION_TIME;
         screenShake = 3;
+        SFX.levelUp();
         // Celebration particles
         for (let i = 0; i < 5; i++) {
             spawnParticles(W / 2 + (Math.random() - 0.5) * 80, H / 2 + (Math.random() - 0.5) * 40, '#ffcc00', 6, 3);
@@ -355,11 +360,13 @@ function updateBike() {
                 spawnParticles(ob.x + 6, ob.y + 10, ob.color, 12, 4);
                 spawnParticles(ob.x + 6, ob.y + 10, '#ffcc00', 6, 3);
                 screenShake = 4;
+                SFX.destroy();
             } else {
                 b.alive = false; b.deathTimer = 0;
                 screenShake = 10;
                 spawnParticles(b.x + 5, b.y + 7, PAL.red, 15, 4);
                 spawnParticles(b.x + 5, b.y + 7, '#888', 10, 3);
+                SFX.death();
                 return;
             }
         }
@@ -373,10 +380,12 @@ function updateBike() {
                 spawnParticles(f.x + 5, f.y + 3, PAL.fishBody, 10, 4);
                 spawnParticles(f.x + 5, f.y + 3, '#ffcc00', 6, 3);
                 screenShake = 3;
+                SFX.destroy();
             } else {
                 b.alive = false; b.deathTimer = 0;
                 screenShake = 8;
                 spawnParticles(b.x + 5, b.y + 7, PAL.fishBody, 12, 4);
+                SFX.death();
                 return;
             }
         }
@@ -390,6 +399,7 @@ function updateBike() {
             screenShake = 3;
             spawnParticles(ch.x + 5, ch.y + 4, '#ffcc00', 12, 4);
             spawnParticles(ch.x + 5, ch.y + 4, PAL.choco, 8, 3);
+            SFX.pickup();
         }
     }
 
