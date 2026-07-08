@@ -5,15 +5,28 @@ const ctx = canvas.getContext('2d');
 const overlay = document.getElementById('ui-overlay');
 
 // ── Constants ──
-const SCALE = 3;
 const W = 192;
 const H = 256;
 const TILE = 8;
 const COLS = W / TILE;
 
-canvas.width = W * SCALE;
-canvas.height = H * SCALE;
-ctx.imageSmoothingEnabled = false;
+// Size the canvas to an INTEGER multiple of the native resolution in real
+// device pixels, so every game pixel maps to a whole number of screen
+// pixels — fractional scaling is what makes pixel art look blurry.
+function resizeCanvas() {
+    const dpr = window.devicePixelRatio || 1;
+    const availW = Math.max(1, window.innerWidth - 8) * dpr;
+    const availH = Math.max(1, window.innerHeight - 8) * dpr;
+    const scale = Math.max(1, Math.floor(Math.min(availW / W, availH / H)));
+    canvas.width = W * scale;
+    canvas.height = H * scale;
+    canvas.style.width = (W * scale / dpr) + 'px';
+    canvas.style.height = (H * scale / dpr) + 'px';
+    ctx.imageSmoothingEnabled = false;
+}
+window.addEventListener('resize', resizeCanvas);
+window.addEventListener('orientationchange', () => setTimeout(resizeCanvas, 100));
+resizeCanvas();
 
 // ── Off-screen buffer (native res) ──
 const buf = document.createElement('canvas');
@@ -438,13 +451,9 @@ function updateFloatingTexts() {
 function drawFloatingTexts() {
     for (const ft of floatingTexts) {
         bctx.globalAlpha = ft.life / ft.maxLife;
-        bctx.fillStyle = ft.color;
-        bctx.font = '8px monospace';
-        bctx.textAlign = 'center';
-        bctx.fillText(ft.text, ft.x, ft.y);
+        drawPixelText(ft.text, ft.x, ft.y - 4, ft.color, 'center');
     }
     bctx.globalAlpha = 1;
-    bctx.textAlign = 'left';
 }
 
 // ── Weather particle system ──
@@ -520,6 +529,90 @@ function drawRect(x, y, w, h, color) {
 function drawPixel(x, y, color) {
     bctx.fillStyle = color;
     bctx.fillRect(Math.round(x), Math.round(y), 1, 1);
+}
+
+// ── Bitmap pixel font (3x5) ──
+// Canvas fillText is always anti-aliased, which reads as blur on pixel
+// art. This font draws glyphs as raw pixels so text stays crisp.
+const FONT = {
+    'A': ['010','101','111','101','101'],
+    'B': ['110','101','110','101','110'],
+    'C': ['011','100','100','100','011'],
+    'D': ['110','101','101','101','110'],
+    'E': ['111','100','110','100','111'],
+    'F': ['111','100','110','100','100'],
+    'G': ['011','100','101','101','011'],
+    'H': ['101','101','111','101','101'],
+    'I': ['111','010','010','010','111'],
+    'J': ['011','001','001','101','010'],
+    'K': ['101','110','100','110','101'],
+    'L': ['100','100','100','100','111'],
+    'M': ['101','111','111','101','101'],
+    'N': ['110','101','101','101','101'],
+    'O': ['010','101','101','101','010'],
+    'P': ['110','101','110','100','100'],
+    'Q': ['010','101','101','011','001'],
+    'R': ['110','101','110','101','101'],
+    'S': ['011','100','010','001','110'],
+    'T': ['111','010','010','010','010'],
+    'U': ['101','101','101','101','111'],
+    'V': ['101','101','101','101','010'],
+    'W': ['101','101','111','111','101'],
+    'X': ['101','101','010','101','101'],
+    'Y': ['101','101','010','010','010'],
+    'Z': ['111','001','010','100','111'],
+    '0': ['111','101','101','101','111'],
+    '1': ['010','110','010','010','111'],
+    '2': ['110','001','010','100','111'],
+    '3': ['110','001','010','001','110'],
+    '4': ['101','101','111','001','001'],
+    '5': ['111','100','110','001','110'],
+    '6': ['011','100','111','101','111'],
+    '7': ['111','001','010','010','010'],
+    '8': ['111','101','111','101','111'],
+    '9': ['111','101','111','001','110'],
+    ' ': ['000','000','000','000','000'],
+    ':': ['000','010','000','010','000'],
+    '!': ['010','010','010','000','010'],
+    '?': ['110','001','010','000','010'],
+    '+': ['000','010','111','010','000'],
+    '-': ['000','000','111','000','000'],
+    '.': ['000','000','000','000','010'],
+    ',': ['000','000','000','010','100'],
+    '/': ['001','001','010','100','100'],
+    '~': ['000','011','110','000','000'],
+    "'": ['010','010','000','000','000'],
+    '=': ['000','111','000','111','000'],
+    '(': ['001','010','010','010','001'],
+    ')': ['100','010','010','010','100'],
+    '✓': ['000','001','101','010','000'],
+};
+
+function pixelTextWidth(str, scale) {
+    scale = scale || 1;
+    return str.length * 4 * scale - scale;
+}
+
+function drawPixelText(text, x, y, color, align, scale) {
+    scale = scale || 1;
+    const str = String(text).toUpperCase();
+    let px = Math.round(x);
+    const w = pixelTextWidth(str, scale);
+    if (align === 'center') px -= Math.floor(w / 2);
+    else if (align === 'right') px -= w;
+    const py = Math.round(y);
+    bctx.fillStyle = color;
+    for (let c = 0; c < str.length; c++) {
+        const glyph = FONT[str[c]] || FONT['?'];
+        for (let row = 0; row < 5; row++) {
+            for (let col = 0; col < 3; col++) {
+                if (glyph[row][col] === '1') {
+                    bctx.fillRect(px + col * scale, py + row * scale, scale, scale);
+                }
+            }
+        }
+        px += 4 * scale;
+    }
 }
 
 // ── Speed lines ──
@@ -776,23 +869,16 @@ function renderTitleScreen() {
         drawPixel(W - 24, ry + 5, '#55bb55');
     }
 
-    // Title text with shadow
-    bctx.textAlign = 'center';
-    bctx.font = '8px monospace';
-
-    // BIKE DASH title
-    bctx.fillStyle = '#000000';
-    bctx.fillText('BIKE DASH', W / 2 + 1, 61);
-    bctx.fillStyle = '#44bbff';
-    bctx.fillText('BIKE DASH', W / 2, 60);
+    // BIKE DASH title with shadow (big pixel text)
+    drawPixelText('BIKE DASH', W / 2 + 1, 53, '#000000', 'center', 2);
+    drawPixelText('BIKE DASH', W / 2, 52, '#44bbff', 'center', 2);
 
     // Animated underline
     const lineW = 50 + Math.sin(gameTime * 0.08) * 5;
-    drawRect(W / 2 - lineW / 2, 64, lineW, 1, '#44bbff');
+    drawRect(W / 2 - lineW / 2, 66, lineW, 1, '#44bbff');
 
     // Subtitle
-    bctx.fillStyle = '#aaaaaa';
-    bctx.fillText('Ride & dodge!', W / 2, 78);
+    drawPixelText('RIDE + DODGE!', W / 2, 74, '#aaaaaa', 'center');
 
     // Animated biker on title
     const titleBikeY = H / 2 + 10;
@@ -836,19 +922,17 @@ function renderTitleScreen() {
     // Controls info
     const blink = Math.sin(gameTime * 0.1) > 0;
     if (blink) {
-        bctx.fillStyle = '#ffffff';
-        bctx.fillText('PRESS ANY KEY', W / 2, H / 2 + 50);
+        drawPixelText('PRESS ANY KEY', W / 2, H / 2 + 44, '#ffffff', 'center');
     }
 
-    bctx.fillStyle = '#666666';
-    bctx.fillText('Arrows / WASD to move', W / 2, H - 40);
-    bctx.fillText('Collect chocolate! P = pause', W / 2, H - 28);
+    drawPixelText('ARROWS / WASD TO MOVE', W / 2, H - 44, '#666666', 'center');
+    drawPixelText('COLLECT CHOCOLATE! P = PAUSE', W / 2, H - 34, '#666666', 'center');
 
     // High score
-    const hs = parseInt(localStorage.getItem('bikeHighScore') || '0');
+    let hs = 0;
+    try { hs = parseInt(localStorage.getItem('bikeHighScore') || '0'); } catch (e) {}
     if (hs > 0) {
-        bctx.fillStyle = '#ffcc00';
-        bctx.fillText('BEST: ' + hs, W / 2, H - 12);
+        drawPixelText('BEST: ' + hs, W / 2, H - 18, '#ffcc00', 'center');
     }
 
     bctx.textAlign = 'left';

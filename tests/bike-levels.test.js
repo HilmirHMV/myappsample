@@ -36,7 +36,7 @@ describe('levelDistance', () => {
 describe('levelCarSpawnRate', () => {
   test('starts at reasonable rate for level 1', () => {
     level = 1;
-    expect(levelCarSpawnRate()).toBe(73); // 80 - 1*7
+    expect(levelCarSpawnRate()).toBe(86); // 92 - 1*6
   });
 
   test('decreases (faster spawning) at higher levels', () => {
@@ -47,26 +47,26 @@ describe('levelCarSpawnRate', () => {
     expect(rate5).toBeLessThan(rate1);
   });
 
-  test('has a minimum cap of 18', () => {
+  test('has a minimum cap of 28', () => {
     level = 100;
-    expect(levelCarSpawnRate()).toBe(18);
+    expect(levelCarSpawnRate()).toBe(28);
   });
 
-  test('hits minimum around level 9', () => {
-    level = 9;
-    expect(levelCarSpawnRate()).toBe(18); // 80 - 63 = 17 -> clamped to 18
+  test('hits minimum around level 11', () => {
+    level = 11;
+    expect(levelCarSpawnRate()).toBe(28); // 92 - 66 = 26 -> clamped to 28
   });
 });
 
 describe('levelFishSpawnRate', () => {
-  test('starts at 110 for level 1', () => {
+  test('starts at 127 for level 1', () => {
     level = 1;
-    expect(levelFishSpawnRate()).toBe(110);
+    expect(levelFishSpawnRate()).toBe(127); // 135 - 1*8
   });
 
-  test('has a minimum cap of 30', () => {
+  test('has a minimum cap of 48', () => {
     level = 100;
-    expect(levelFishSpawnRate()).toBe(30);
+    expect(levelFishSpawnRate()).toBe(48);
   });
 
   test('decreases with level', () => {
@@ -79,9 +79,9 @@ describe('levelFishSpawnRate', () => {
 });
 
 describe('levelChocoSpawnRate', () => {
-  test('starts at 215 for level 1', () => {
+  test('starts at 180 for level 1', () => {
     level = 1;
-    expect(levelChocoSpawnRate()).toBe(215);
+    expect(levelChocoSpawnRate()).toBe(180); // 170 + 1*10
   });
 
   test('increases with level (chocolates become rarer)', () => {
@@ -92,18 +92,18 @@ describe('levelChocoSpawnRate', () => {
     expect(rate5).toBeGreaterThan(rate1);
   });
 
-  test('has a minimum cap of 100', () => {
+  test('has a minimum cap of 90', () => {
     // Since rate increases with level, the minimum cap won't be hit in normal play
     // but verify the formula works
     level = 1;
-    expect(levelChocoSpawnRate()).toBeGreaterThanOrEqual(100);
+    expect(levelChocoSpawnRate()).toBeGreaterThanOrEqual(90);
   });
 });
 
 describe('levelBaseSpeed', () => {
-  test('starts at 1.15 for level 1', () => {
+  test('starts at 1.0 for level 1', () => {
     level = 1;
-    expect(levelBaseSpeed()).toBeCloseTo(1.15);
+    expect(levelBaseSpeed()).toBeCloseTo(1.0);
   });
 
   test('increases with level', () => {
@@ -114,10 +114,10 @@ describe('levelBaseSpeed', () => {
     expect(speed5).toBeGreaterThan(speed1);
   });
 
-  test('formula is 1.0 + level * 0.15', () => {
+  test('formula is 0.9 + level * 0.1', () => {
     for (let lvl = 1; lvl <= 10; lvl++) {
       level = lvl;
-      expect(levelBaseSpeed()).toBeCloseTo(1.0 + lvl * 0.15);
+      expect(levelBaseSpeed()).toBeCloseTo(0.9 + lvl * 0.1);
     }
   });
 });

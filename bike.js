@@ -66,16 +66,16 @@ function levelDistance(lvl) {
 }
 
 function levelCarSpawnRate() {
-    return Math.max(18, 80 - level * 7);
+    return Math.max(28, 92 - level * 6);
 }
 function levelFishSpawnRate() {
-    return Math.max(30, 120 - level * 10);
+    return Math.max(48, 135 - level * 8);
 }
 function levelChocoSpawnRate() {
-    return Math.max(100, 200 + level * 15);
+    return Math.max(90, 170 + level * 10);
 }
 function levelBaseSpeed() {
-    return 1.0 + level * 0.15;
+    return 0.9 + level * 0.1;
 }
 
 const ROAD_THEMES = [
@@ -140,7 +140,7 @@ function missionProgress(type, amount) {
 // ── Wave pacing: brief calm windows between intense stretches ──
 let waveTimer = 0;
 const WAVE_CYCLE = 900;   // ~15s cycle
-const WAVE_CALM = 180;    // last ~3s of each cycle is calm
+const WAVE_CALM = 240;    // last ~4s of each cycle is calm
 
 function inCalmWindow() {
     return (waveTimer % WAVE_CYCLE) >= (WAVE_CYCLE - WAVE_CALM);
@@ -262,7 +262,7 @@ function spawnBikeFish() {
     bikeFish.push({
         x: fromLeft ? -12 : W + 12,
         y: fy, w: 10, h: 6,
-        vx: (fromLeft ? 1 : -1) * (0.6 + Math.random() * 0.8),
+        vx: (fromLeft ? 1 : -1) * (0.5 + Math.random() * 0.6),
         pattern: pat, originY: fy, timer: 0,
         nearMissed: false
     });
@@ -493,7 +493,7 @@ function updateBike() {
     }
 
     // Score & speed
-    const baseSpeed = levelBaseSpeed() + score / 500;
+    const baseSpeed = levelBaseSpeed() + score / 800;
     bikeSpeed = invulnTimer > 0 ? baseSpeed + INVULN_SPEED_BONUS : baseSpeed;
     bikeScroll += bikeSpeed;
     levelScroll += bikeSpeed;
@@ -545,7 +545,7 @@ function updateBike() {
     if (bikeNextSpawn <= 0 && !calm) {
         spawnCarObstacle();
         bikeNextSpawn = levelCarSpawnRate();
-        if (level >= 3 && Math.random() < 0.3) spawnCarObstacle();
+        if (level >= 4 && Math.random() < 0.25) spawnCarObstacle();
     }
 
     bikeFishTimer--;
@@ -574,7 +574,7 @@ function updateBike() {
         if (boss.laneTimer <= 0) {
             if (boss.lane < b.lane) boss.lane++;
             else if (boss.lane > b.lane) boss.lane--;
-            boss.laneTimer = Math.max(30, 70 - level * 2);
+            boss.laneTimer = Math.max(45, 85 - level * 2);
         }
         boss.x = lerp(boss.x, bikeLanes[boss.lane] - boss.w / 2, 0.05);
         if (gameTime % 8 === 0) {
@@ -796,15 +796,32 @@ function applyPickup(pu, b) {
         SFX.shield();
         spawnFloatingText(pu.x + 5, pu.y - 4, 'SHIELD!', '#44aaff');
     } else if (pu.type === 'bell') {
+        // Shockwave: clears every car and fish on screen
         let cleared = 0;
         for (const f of bikeFish) {
             spawnParticles(f.x + 5, f.y + 3, PAL.fishBody, 8, 4);
             cleared++;
         }
         bikeFish = [];
-        screenShake = 5;
+        for (const ob of bikeObstacles) {
+            spawnParticles(ob.x + ob.w / 2, ob.y + ob.h / 2, ob.color, 10, 4);
+            spawnParticles(ob.x + ob.w / 2, ob.y + ob.h / 2, '#ffdd44', 5, 3);
+            missionProgress('destroy');
+            cleared++;
+        }
+        bikeObstacles = [];
+        // Expanding ring of particles from the biker
+        for (let a = 0; a < 16; a++) {
+            const ang = (a / 16) * Math.PI * 2;
+            particles.push({
+                x: b.x + 5, y: b.y + 7,
+                vx: Math.cos(ang) * 4, vy: Math.sin(ang) * 4,
+                life: 25, maxLife: 25, color: '#ffdd44', size: 2
+            });
+        }
+        screenShake = 8;
         SFX.bell();
-        spawnFloatingText(pu.x + 5, pu.y - 4, cleared > 0 ? 'FISH BE GONE!' : 'RING!', '#ffdd44');
+        spawnFloatingText(pu.x + 5, pu.y - 4, cleared > 0 ? 'SHOCKWAVE!' : 'RING!', '#ffdd44');
     } else if (pu.type === 'magnet') {
         magnetTimer = MAGNET_DURATION;
         spawnParticles(pu.x + 5, pu.y + 5, '#ff6688', 12, 4);
@@ -1034,15 +1051,9 @@ function renderBike() {
     drawRect(0, 0, W, 20, '#000000');
     bctx.globalAlpha = 1;
 
-    bctx.fillStyle = '#fff';
-    bctx.font = '8px monospace';
-    bctx.textAlign = 'left';
-    bctx.fillText('LVL ' + level, 4, 10);
-    bctx.textAlign = 'center';
-    bctx.fillText('DIST: ' + score, W / 2, 10);
-    bctx.textAlign = 'right';
-    bctx.fillText('BEST: ' + bikeHighScore, W - 4, 10);
-    bctx.textAlign = 'left';
+    drawPixelText('LVL ' + level, 4, 4, '#ffffff');
+    drawPixelText('DIST ' + score, W / 2, 4, '#ffffff', 'center');
+    drawPixelText('BEST ' + bikeHighScore, W - 4, 4, '#ffffff', 'right');
 
     // Level progress bar
     const barW = 40;
@@ -1057,64 +1068,47 @@ function renderBike() {
     if (levelScroll / SCORE_DIVISOR < 30) {
         const t = currentTheme();
         bctx.globalAlpha = clamp(1 - (levelScroll / SCORE_DIVISOR) / 30, 0, 1);
-        bctx.fillStyle = '#ffffff';
-        bctx.textAlign = 'center';
-        bctx.fillText(t.name, W / 2, 30);
-        bctx.textAlign = 'left';
+        drawPixelText(t.name, W / 2, 36, '#ffffff', 'center');
         bctx.globalAlpha = 1;
     }
 
     // Near-miss combo
     if (nearMissCombo >= 2 && nearMissTimer > 0) {
-        bctx.fillStyle = '#44ffff';
-        bctx.textAlign = 'right';
-        bctx.fillText('x' + nearMissCombo, W - 4, 48);
-        bctx.textAlign = 'left';
+        drawPixelText('X' + nearMissCombo, W - 4, 44, '#44ffff', 'right');
     }
 
     // Mission tracker
     if (mission && !levelComplete) {
-        bctx.font = '8px monospace';
         if (mission.done) {
-            bctx.fillStyle = '#44ff88';
-            bctx.fillText('✓ ' + mission.text, 4, 28);
+            drawPixelText('✓ ' + mission.text, 4, 23, '#44ff88');
         } else {
-            bctx.fillStyle = '#cccccc';
-            bctx.fillText(mission.text + ' (' + mission.progress + '/' + mission.n + ')', 4, 28);
+            drawPixelText(mission.text + ' (' + mission.progress + '/' + mission.n + ')', 4, 23, '#cccccc');
         }
     }
 
-    // Boss HP
+    // Boss HP (right edge, below BEST)
     if (boss) {
-        bctx.fillStyle = '#ff4444';
-        bctx.textAlign = 'center';
-        bctx.fillText('BOSS', W / 2, 28);
-        bctx.textAlign = 'left';
+        drawPixelText('BOSS', W - 4, 23, '#ff4444', 'right');
         for (let i = 0; i < BOSS_HP; i++) {
-            drawRect(W / 2 - 12 + i * 9, 31, 7, 3, i < boss.hp ? '#ff4444' : '#552222');
+            drawRect(W - 31 + i * 9, 30, 7, 3, i < boss.hp ? '#ff4444' : '#552222');
         }
     }
 
     // Active effect indicators
-    let fxY = 36;
+    let fxY = 32;
     if (magnetTimer > 0) {
-        bctx.fillStyle = '#ff6688';
-        bctx.fillText('MAGNET ' + Math.ceil(magnetTimer / 60), 4, fxY);
-        fxY += 9;
+        drawPixelText('MAGNET ' + Math.ceil(magnetTimer / 60), 4, fxY, '#ff6688');
+        fxY += 8;
     }
     if (bikeShield) {
-        bctx.fillStyle = '#44aaff';
-        bctx.fillText('SHIELD', 4, fxY);
+        drawPixelText('SHIELD', 4, fxY, '#44aaff');
     }
 
     // Calm window hint
     if (inCalmWindow()) {
-        bctx.fillStyle = '#88dd88';
-        bctx.textAlign = 'center';
         bctx.globalAlpha = 0.6 + Math.sin(gameTime * 0.1) * 0.3;
-        bctx.fillText('~ breather ~', W / 2, H - 8);
+        drawPixelText('~ BREATHER ~', W / 2, H - 12, '#88dd88', 'center');
         bctx.globalAlpha = 1;
-        bctx.textAlign = 'left';
     }
 
     // Level complete banner
@@ -1123,13 +1117,8 @@ function renderBike() {
         bctx.globalAlpha = 0.8;
         drawRect(0, bannerY, W, 32, '#000000');
         bctx.globalAlpha = 1;
-        bctx.fillStyle = '#ffcc00';
-        bctx.font = '8px monospace';
-        bctx.textAlign = 'center';
-        bctx.fillText('LEVEL ' + (level - 1) + ' COMPLETE!', W / 2, bannerY + 12);
-        bctx.fillStyle = '#aaaaaa';
-        bctx.fillText('Level ' + level + ': ' + currentTheme().name, W / 2, bannerY + 24);
-        bctx.textAlign = 'left';
+        drawPixelText('LEVEL ' + (level - 1) + ' COMPLETE!', W / 2, bannerY + 8, '#ffcc00', 'center');
+        drawPixelText('LEVEL ' + level + ': ' + currentTheme().name, W / 2, bannerY + 20, '#aaaaaa', 'center');
     }
 
     bctx.restore();
@@ -1140,13 +1129,8 @@ function renderBike() {
         bctx.globalAlpha = 0.7;
         drawRect(0, 0, W, H, '#000000');
         bctx.globalAlpha = 1;
-        bctx.fillStyle = '#ffffff';
-        bctx.font = '8px monospace';
-        bctx.textAlign = 'center';
-        bctx.fillText('PAUSED', W / 2, H / 2 - 4);
-        bctx.fillStyle = '#888888';
-        bctx.fillText(isMobile ? 'Tap ⏸ to resume' : 'Press P to resume', W / 2, H / 2 + 10);
-        bctx.textAlign = 'left';
+        drawPixelText('PAUSED', W / 2, H / 2 - 10, '#ffffff', 'center', 2);
+        drawPixelText(isMobile ? 'TAP BUTTON TO RESUME' : 'PRESS P TO RESUME', W / 2, H / 2 + 8, '#888888', 'center');
     }
 
     drawDpad();
