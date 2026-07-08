@@ -36,6 +36,8 @@ bctx.imageSmoothingEnabled = false;
 
 // ── Game state ──
 let state = 'title'; // title | playing | paused | dead
+let gameMode = '2d'; // '2d' classic | '3d' webgl runner
+let menuSelection = 0; // 0 = 2D, 1 = 3D
 let score = 0;
 let particles = [];
 let screenShake = 0;
@@ -137,15 +139,44 @@ document.addEventListener('keydown', e => {
         return;
     }
     if (state === 'paused') return;
-    if (state === 'title' || state === 'dead') startGame();
+    if (state === 'title') {
+        // Menu: arrows choose mode, Enter/Space start
+        if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'KeyW', 'KeyS', 'KeyA', 'KeyD'].includes(e.code)) {
+            menuSelection = 1 - menuSelection;
+            gameMode = menuSelection === 1 ? '3d' : '2d';
+            SFX.laneSwitch();
+        } else if (e.code === 'Enter' || e.code === 'Space') {
+            startGame();
+        }
+        return;
+    }
+    if (state === 'dead') {
+        if (e.code === 'KeyM') { backToMenu(); return; }
+        startGame();
+    }
 });
 document.addEventListener('keyup', e => { keys[e.code] = false; });
+
+// Menu panel hit areas (game coords, drawn in renderTitleScreen)
+const MENU_PANEL_2D = { x: 16, y: 118, w: 160, h: 42 };
+const MENU_PANEL_3D = { x: 16, y: 168, w: 160, h: 42 };
 
 function handleTouchStart(e) {
     e.preventDefault();
     enableMobile();
     unlockAudio();
-    // Pause button check (playing or paused)
+
+    // 3D mode has its own touch scheme (left/right steer, middle jump,
+    // top strip pauses)
+    if (gameMode === '3d' && (state === 'playing' || state === 'paused')) {
+        const t = e.changedTouches[0];
+        if (t.clientY < 60) { togglePause(); return; }
+        if (state === 'paused') return;
+        g3Touch(t.clientX);
+        return;
+    }
+
+    // Pause button check (playing or paused, 2D)
     if (state === 'playing' || state === 'paused') {
         for (let i = 0; i < e.changedTouches.length; i++) {
             const g = touchToGame(e.changedTouches[i]);
@@ -153,7 +184,15 @@ function handleTouchStart(e) {
         }
     }
     if (state === 'paused') return;
-    if (state === 'title' || state === 'dead') { startGame(); return; }
+    if (state === 'title') {
+        // Tap a panel to pick that mode; tap elsewhere starts the selection
+        const g = touchToGame(e.changedTouches[0]);
+        if (pointInRect(g.x, g.y, MENU_PANEL_2D)) { menuSelection = 0; gameMode = '2d'; }
+        else if (pointInRect(g.x, g.y, MENU_PANEL_3D)) { menuSelection = 1; gameMode = '3d'; }
+        startGame();
+        return;
+    }
+    if (state === 'dead') { startGame(); return; }
     updateDpadFromTouches(e);
 }
 function handleTouchMove(e) {
@@ -175,10 +214,17 @@ document.addEventListener('touchstart', handleTouchStart, { passive: false });
 document.addEventListener('touchmove', handleTouchMove, { passive: false });
 document.addEventListener('touchend', handleTouchEnd, { passive: false });
 document.addEventListener('touchcancel', handleTouchEnd, { passive: false });
-document.addEventListener('click', () => {
+document.addEventListener('click', e => {
     unlockAudio();
     if (state === 'paused') return;
-    if (state === 'title' || state === 'dead') startGame();
+    if (state === 'title') {
+        const g = touchToGame(e);
+        if (pointInRect(g.x, g.y, MENU_PANEL_2D)) { menuSelection = 0; gameMode = '2d'; }
+        else if (pointInRect(g.x, g.y, MENU_PANEL_3D)) { menuSelection = 1; gameMode = '3d'; }
+        startGame();
+        return;
+    }
+    if (state === 'dead') startGame();
 });
 
 // ── Helpers ──
@@ -880,85 +926,98 @@ function renderTitleScreen() {
     // Subtitle
     drawPixelText('RIDE + DODGE!', W / 2, 74, '#aaaaaa', 'center');
 
-    // Animated biker on title
-    const titleBikeY = H / 2 + 10;
-    const titleBikeX = W / 2 - 5;
-    const frame = Math.floor(gameTime / 6) % 2;
-
-    // Bicycle (styled by current unlock)
+    // ── Mode selection panels ──
     const tf = currentFrame();
-    drawRect(titleBikeX + 1, titleBikeY + 11, 3, 3, '#444');
-    drawPixel(titleBikeX + 2, titleBikeY + 12, tf.hi);
-    drawRect(titleBikeX + 7, titleBikeY + 11, 3, 3, '#444');
-    drawPixel(titleBikeX + 8, titleBikeY + 12, tf.hi);
-    drawRect(titleBikeX + 3, titleBikeY + 10, 5, 1, tf.color);
-    drawRect(titleBikeX + 4, titleBikeY + 9, 1, 2, tf.color);
-    drawRect(titleBikeX + 6, titleBikeY + 9, 1, 2, tf.color);
-    drawRect(titleBikeX + 3, titleBikeY + 9, 3, 1, tf.hi);
-    drawRect(titleBikeX + 7, titleBikeY + 8, 2, 1, tf.hi);
+    const blink = Math.sin(gameTime * 0.12) > 0;
 
-    // Trail sparkles under the title biker for unlocked rides
-    if (tf.trail && gameTime % 4 === 0) {
-        spawnParticles(titleBikeX + 2 + Math.random() * 6, titleBikeY + 13, tf.trail, 1, 0.7);
+    function drawPanel(r, selected) {
+        bctx.globalAlpha = 0.75;
+        drawRect(r.x, r.y, r.w, r.h, '#000000');
+        bctx.globalAlpha = 1;
+        const border = selected ? (blink ? '#ffffff' : '#ffcc00') : '#555555';
+        drawRect(r.x, r.y, r.w, 2, border);
+        drawRect(r.x, r.y + r.h - 2, r.w, 2, border);
+        drawRect(r.x, r.y, 2, r.h, border);
+        drawRect(r.x + r.w - 2, r.y, 2, r.h, border);
     }
 
-    // Legs (animated pedaling)
-    if (frame === 0) {
-        drawRect(titleBikeX + 3, titleBikeY + 8, 2, 2, PAL.pants);
-        drawRect(titleBikeX + 6, titleBikeY + 7, 2, 2, PAL.pants);
-        drawRect(titleBikeX + 3, titleBikeY + 10, 2, 1, PAL.shoe);
-        drawRect(titleBikeX + 6, titleBikeY + 9, 2, 1, PAL.shoe);
-    } else {
-        drawRect(titleBikeX + 3, titleBikeY + 7, 2, 2, PAL.pants);
-        drawRect(titleBikeX + 6, titleBikeY + 8, 2, 2, PAL.pants);
-        drawRect(titleBikeX + 3, titleBikeY + 9, 2, 1, PAL.shoe);
-        drawRect(titleBikeX + 6, titleBikeY + 10, 2, 1, PAL.shoe);
+    // Panel 1: 2D classic (with mini biker in current unlock colors)
+    drawPanel(MENU_PANEL_2D, menuSelection === 0);
+    const bx = MENU_PANEL_2D.x + 14, by = MENU_PANEL_2D.y + 14;
+    drawRect(bx + 1, by + 11, 3, 3, '#444');
+    drawRect(bx + 7, by + 11, 3, 3, '#444');
+    drawRect(bx + 3, by + 10, 5, 1, tf.color);
+    drawRect(bx + 3, by + 9, 3, 1, tf.hi);
+    drawRect(bx + 3, by + 4, 5, 4, tf.shirt);
+    drawRect(bx + 3, by + 1, 5, 3, PAL.skin);
+    drawRect(bx + 3, by, 5, 2, PAL.hair);
+    drawPixel(bx + 5, by + 2, PAL.black);
+    drawPixel(bx + 7, by + 2, PAL.black);
+    drawPixelText('2D CLASSIC', MENU_PANEL_2D.x + 34, MENU_PANEL_2D.y + 10, menuSelection === 0 ? '#ffffff' : '#999999');
+    drawPixelText('THE ORIGINAL', MENU_PANEL_2D.x + 34, MENU_PANEL_2D.y + 22, '#777777');
+
+    // Panel 2: 3D dash (pseudo-3D road icon)
+    drawPanel(MENU_PANEL_3D, menuSelection === 1);
+    const rx = MENU_PANEL_3D.x + 8, ry = MENU_PANEL_3D.y + 8;
+    // Perspective road: rows narrowing toward a horizon
+    for (let i = 0; i < 12; i++) {
+        const rowW = 4 + i * 1.6;
+        drawRect(rx + 12 - rowW / 2, ry + 12 + i, rowW, 1, i % 3 === 0 ? '#666677' : '#555566');
     }
-    drawRect(titleBikeX + 3, titleBikeY + 4, 5, 4, tf.shirt);
-    drawPixel(titleBikeX + 4, titleBikeY + 4, tf.shirtHi);
-    drawRect(titleBikeX + 7, titleBikeY + 5, 2, 2, PAL.skin);
-    drawPixel(titleBikeX + 2, titleBikeY + 5, PAL.skin);
-    drawRect(titleBikeX + 3, titleBikeY + 1, 5, 3, PAL.skin);
-    drawRect(titleBikeX + 3, titleBikeY, 5, 2, PAL.hair);
-    drawRect(titleBikeX + 2, titleBikeY, 6, 1, PAL.hair);
-    drawPixel(titleBikeX + 4, titleBikeY, PAL.hairHi);
-    drawPixel(titleBikeX + 5, titleBikeY + 2, PAL.black);
-    drawPixel(titleBikeX + 7, titleBikeY + 2, PAL.black);
+    drawRect(rx + 2, ry + 10, 20, 2, '#8888aa');
+    drawRect(rx + 11, ry + 16, 2, 2, '#ffcc00');
+    drawRect(rx + 10, ry + 20, 4, 3, '#dd3322');
+    drawPixelText('3D DASH', MENU_PANEL_3D.x + 34, MENU_PANEL_3D.y + 10, menuSelection === 1 ? '#ffffff' : '#999999');
+    drawPixelText('NEW! WEBGL', MENU_PANEL_3D.x + 34, MENU_PANEL_3D.y + 22, '#ffcc44');
 
-    // Trail particles under the biker
-    updateParticles();
-    for (const pt of particles) {
-        bctx.globalAlpha = pt.life / pt.maxLife;
-        drawRect(pt.x, pt.y, pt.size, pt.size, pt.color);
-    }
-    bctx.globalAlpha = 1;
-
-    // Current ride name
-    drawPixelText('RIDE: ' + tf.name, W / 2, titleBikeY + 22, tf.trail || '#999999', 'center');
-
-    // Controls info
-    const blink = Math.sin(gameTime * 0.1) > 0;
+    // Prompt
     if (blink) {
-        drawPixelText('PRESS ANY KEY', W / 2, H / 2 + 44, '#ffffff', 'center');
+        drawPixelText('TAP OR ENTER TO START', W / 2, 224, '#ffffff', 'center');
     }
+    drawPixelText('ARROWS: CHOOSE MODE', W / 2, H - 20, '#666666', 'center');
 
-    drawPixelText('ARROWS / WASD TO MOVE', W / 2, H - 44, '#666666', 'center');
-    drawPixelText('COLLECT CHOCOLATE! P = PAUSE', W / 2, H - 34, '#666666', 'center');
-
-    // High score
+    // Current ride + best score
+    drawPixelText('RIDE: ' + tf.name, W / 2, 92, tf.trail || '#999999', 'center');
     let hs = 0;
     try { hs = parseInt(localStorage.getItem('bikeHighScore') || '0'); } catch (e) {}
     if (hs > 0) {
-        drawPixelText('BEST: ' + hs, W / 2, H - 18, '#ffcc00', 'center');
+        drawPixelText('BEST: ' + hs, W / 2, 102, '#ffcc00', 'center');
     }
 
-    bctx.textAlign = 'left';
     blitToScreen();
 }
 
 // ── Start / Reset ──
+// Show the right canvas for the current mode ('menu' uses the 2D canvas)
+function setCanvasMode(mode) {
+    const c3d = document.getElementById('game3d');
+    const h3d = document.getElementById('hud3d');
+    if (mode === '3d') {
+        canvas.classList.add('hidden');
+        if (c3d) c3d.classList.remove('hidden');
+        if (h3d) h3d.classList.remove('hidden');
+    } else {
+        canvas.classList.remove('hidden');
+        if (c3d) c3d.classList.add('hidden');
+        if (h3d) h3d.classList.add('hidden');
+    }
+}
+
+function backToMenu() {
+    state = 'title';
+    stopMusic();
+    overlay.classList.add('hidden');
+    setCanvasMode('2d');
+}
+
 function startGame() {
     ensureAudio();
+    if (gameMode === '3d') {
+        if (!init3D()) {
+            // WebGL unavailable — fall back to the 2D game
+            gameMode = '2d';
+        }
+    }
     SFX.start();
     startMusic();
     state = 'playing';
@@ -970,8 +1029,16 @@ function startGame() {
     score = 0;
     screenShake = 0;
     invulnTimer = 0;
-    initScenery();
-    startBikeMode();
+    hitStop = 0;
+    if (gameMode === '3d') {
+        setCanvasMode('3d');
+        resize3D();
+        start3DMode();
+    } else {
+        setCanvasMode('2d');
+        initScenery();
+        startBikeMode();
+    }
 }
 
 // ── Main game loop (started after all scripts load) ──
@@ -979,6 +1046,17 @@ function gameLoop() {
     gameTime++;
     if (state === 'title') {
         renderTitleScreen();
+    } else if (gameMode === '3d') {
+        if (state === 'playing') {
+            if (hitStop > 0) {
+                hitStop--;
+                if (hitStop % 3 === 0) update3D();
+            } else {
+                update3D();
+            }
+        }
+        render3D();
+        updateHUD3D();
     } else {
         if (state === 'playing') {
             if (hitStop > 0) {

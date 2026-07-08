@@ -58,6 +58,14 @@ function setupGameEnvironment() {
   overlay.id = 'ui-overlay';
   document.body.appendChild(overlay);
 
+  // 3D mode elements
+  var canvas3d = document.createElement('canvas');
+  canvas3d.id = 'game3d';
+  document.body.appendChild(canvas3d);
+  var hud3d = document.createElement('div');
+  hud3d.id = 'hud3d';
+  document.body.appendChild(hud3d);
+
   // Mock localStorage
   const store = {};
   Object.defineProperty(window, 'localStorage', {
@@ -75,11 +83,13 @@ function setupGameEnvironment() {
   // Load and preprocess game scripts
   const gameCode = fs.readFileSync(path.join(__dirname, '..', 'game.js'), 'utf-8');
   const bikeCode = fs.readFileSync(path.join(__dirname, '..', 'bike.js'), 'utf-8');
+  const bike3dCode = fs.readFileSync(path.join(__dirname, '..', 'bike3d.js'), 'utf-8');
 
   // Convert const/let to var at top level, then eval in global scope
   // Using indirect eval: (0, eval)(...) ensures global scope execution
   (0, eval)(makeGlobal(gameCode));
   (0, eval)(makeGlobal(bikeCode));
+  (0, eval)(makeGlobal(bike3dCode));
 }
 
 module.exports = { setupGameEnvironment };

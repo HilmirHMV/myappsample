@@ -48,7 +48,7 @@ jobs:
       - name: Prepare deploy folder
         run: |
           mkdir dist
-          cp index.html game.js bike.js manifest.json icon-192.png icon-512.png apple-touch-icon.png dist/
+          cp index.html game.js bike.js bike3d.js manifest.json icon-192.png icon-512.png apple-touch-icon.png dist/
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
