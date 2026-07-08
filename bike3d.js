@@ -187,6 +187,16 @@ function update3D() {
         f.z += g3Speed * 0.9;
         f.wob += 0.15;
         f.yy = f.y + Math.sin(f.wob) * 0.15;
+
+        // Splash when crossing the road edge (entering or leaving)
+        const onRoad = Math.abs(f.x) < 4.4;
+        if (f.wasOnRoad !== undefined && onRoad !== f.wasOnRoad) {
+            const edgeX = f.x > 0 ? 4.4 : -4.4;
+            g3Burst(edgeX, 0.2, f.z, [0.7, 0.85, 1.0], 8, 0.15);
+            g3Burst(edgeX, 0.2, f.z, [1, 1, 1], 4, 0.1);
+            if (f.z > -50) SFX.splash(); // only audible when close
+        }
+        f.wasOnRoad = onRoad;
     }
     g3Fish = g3Fish.filter(f => f.z < G3_KILL_Z && f.x > -9 && f.x < 9 && !f.dead);
 
@@ -580,4 +590,32 @@ function g3Touch(clientX) {
     if (frac < 0.35) g3MoveLeft();
     else if (frac > 0.65) g3MoveRight();
     else g3Jump();
+}
+
+// ── Engine hum: continuous low drone whose pitch follows speed ──
+let g3HumOsc = null;
+let g3HumGain = null;
+
+function g3Hum() {
+    // Never create the AudioContext here — that must happen on a user
+    // gesture (unlockAudio). Only attach once the context exists.
+    if (!audioCtx) return;
+    if (!g3HumOsc) {
+        g3HumOsc = audioCtx.createOscillator();
+        g3HumGain = audioCtx.createGain();
+        g3HumOsc.type = 'sawtooth';
+        g3HumOsc.frequency.value = 70;
+        g3HumGain.gain.value = 0;
+        g3HumOsc.connect(g3HumGain);
+        g3HumGain.connect(audioCtx.destination);
+        g3HumOsc.start();
+    }
+    const active = state === 'playing' && gameMode === '3d';
+    const t = audioCtx.currentTime;
+    g3HumGain.gain.setTargetAtTime(active ? 0.02 : 0, t, 0.1);
+    if (active) {
+        // Pitch rises with speed; boost adds an extra growl
+        const freq = 55 + g3Speed * 90 + (g3Invuln > 0 ? 45 : 0);
+        g3HumOsc.frequency.setTargetAtTime(freq, t, 0.15);
+    }
 }
