@@ -139,6 +139,13 @@ document.addEventListener('keydown', e => {
         return;
     }
     if (state === 'paused') return;
+    // Buffer 3D jumps at the event level so a quick tap between
+    // animation frames still registers
+    if (state === 'playing' && gameMode === '3d' &&
+        (e.code === 'Space' || e.code === 'ArrowUp' || e.code === 'KeyW') &&
+        typeof g3QueueJump === 'function') {
+        g3QueueJump();
+    }
     if (state === 'title') {
         // Menu: arrows choose mode, Enter/Space start
         if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'KeyW', 'KeyS', 'KeyA', 'KeyD'].includes(e.code)) {
