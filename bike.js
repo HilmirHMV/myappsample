@@ -153,12 +153,14 @@ try {
 } catch (e) {
     // localStorage unavailable — progression won't persist
 }
+// Each unlock restyles the whole rig: frame, shirt, wheels, and a
+// colored trail while riding — visible at a glance, not just 5 pixels.
 const FRAME_UNLOCKS = [
-    { dist: 0,     color: '#444444', hi: '#777777', name: 'CLASSIC' },
-    { dist: 1000,  color: '#aa2222', hi: '#dd5555', name: 'RED ROCKET' },
-    { dist: 2500,  color: '#2255bb', hi: '#5588ee', name: 'BLUE BLAZE' },
-    { dist: 5000,  color: '#bb9911', hi: '#ffcc33', name: 'GOLD GLIDER' },
-    { dist: 10000, color: '#aa44aa', hi: '#dd77dd', name: 'NEON NIGHT' },
+    { dist: 0,     color: '#444444', hi: '#777777', shirt: '#2a2a3a', shirtHi: '#3a3a4e', trail: null,      name: 'CLASSIC' },
+    { dist: 1000,  color: '#aa2222', hi: '#ff5555', shirt: '#8a1f1f', shirtHi: '#b54545', trail: '#ff5544', name: 'RED ROCKET' },
+    { dist: 2500,  color: '#2255bb', hi: '#66aaff', shirt: '#1f3f8a', shirtHi: '#4568b5', trail: '#44aaff', name: 'BLUE BLAZE' },
+    { dist: 5000,  color: '#bb9911', hi: '#ffdd44', shirt: '#8a6d1f', shirtHi: '#b59945', trail: '#ffcc44', name: 'GOLD GLIDER' },
+    { dist: 10000, color: '#aa44aa', hi: '#ff77ff', shirt: '#7a1f8a', shirtHi: '#a545b5', trail: '#ff44ff', name: 'NEON NIGHT' },
 ];
 
 function currentFrame() {
@@ -512,9 +514,12 @@ function updateBike() {
         if (nearMissTimer <= 0) nearMissCombo = 0;
     }
 
-    // Biker trail when invulnerable or fast
+    // Biker trail: invulnerability > unlock trail > speed dust
+    const rideFrame = currentFrame();
     if (invulnTimer > 0 && gameTime % 2 === 0) {
         spawnParticles(b.x + 5, b.y + 14, '#ffee44', 1, 0.8);
+    } else if (rideFrame.trail && gameTime % 3 === 0) {
+        spawnParticles(b.x + 2 + Math.random() * 6, b.y + 13, rideFrame.trail, 1, 0.7);
     } else if (bikeSpeed > 2.5 && gameTime % 3 === 0) {
         spawnParticles(b.x + 5, b.y + 14, '#888888', 1, 0.5);
     }
@@ -952,12 +957,12 @@ function drawBiker(bx, by) {
         drawPixel(x + 12, y + 8, '#88ccff');
     }
 
-    // Bicycle (frame color from progression unlocks)
+    // Bicycle (whole rig styled by progression unlocks)
     const fr = currentFrame();
     drawRect(x + 1, y + 11, 3, 3, '#444');
-    drawPixel(x + 2, y + 12, '#888');
+    drawPixel(x + 2, y + 12, fr.hi);
     drawRect(x + 7, y + 11, 3, 3, '#444');
-    drawPixel(x + 8, y + 12, '#888');
+    drawPixel(x + 8, y + 12, fr.hi);
     drawRect(x + 3, y + 10, 5, 1, fr.color);
     drawRect(x + 4, y + 9, 1, 2, fr.color);
     drawRect(x + 6, y + 9, 1, 2, fr.color);
@@ -975,8 +980,8 @@ function drawBiker(bx, by) {
         drawRect(x + 3, y + 9, 2, 1, PAL.shoe);
         drawRect(x + 6, y + 10, 2, 1, PAL.shoe);
     }
-    drawRect(x + 3, y + 4, 5, 4, PAL.shirt);
-    drawPixel(x + 4, y + 4, PAL.shirtHi);
+    drawRect(x + 3, y + 4, 5, 4, fr.shirt);
+    drawPixel(x + 4, y + 4, fr.shirtHi);
     drawRect(x + 7, y + 5, 2, 2, PAL.skin);
     drawPixel(x + 2, y + 5, PAL.skin);
     drawRect(x + 3, y + 1, 5, 3, PAL.skin);

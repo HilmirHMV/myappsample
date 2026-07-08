@@ -885,16 +885,22 @@ function renderTitleScreen() {
     const titleBikeX = W / 2 - 5;
     const frame = Math.floor(gameTime / 6) % 2;
 
-    // Bicycle wheels
+    // Bicycle (styled by current unlock)
+    const tf = currentFrame();
     drawRect(titleBikeX + 1, titleBikeY + 11, 3, 3, '#444');
-    drawPixel(titleBikeX + 2, titleBikeY + 12, '#888');
+    drawPixel(titleBikeX + 2, titleBikeY + 12, tf.hi);
     drawRect(titleBikeX + 7, titleBikeY + 11, 3, 3, '#444');
-    drawPixel(titleBikeX + 8, titleBikeY + 12, '#888');
-    drawRect(titleBikeX + 3, titleBikeY + 10, 5, 1, '#777');
-    drawRect(titleBikeX + 4, titleBikeY + 9, 1, 2, '#777');
-    drawRect(titleBikeX + 6, titleBikeY + 9, 1, 2, '#777');
-    drawRect(titleBikeX + 3, titleBikeY + 9, 3, 1, '#444');
-    drawRect(titleBikeX + 7, titleBikeY + 8, 2, 1, '#888');
+    drawPixel(titleBikeX + 8, titleBikeY + 12, tf.hi);
+    drawRect(titleBikeX + 3, titleBikeY + 10, 5, 1, tf.color);
+    drawRect(titleBikeX + 4, titleBikeY + 9, 1, 2, tf.color);
+    drawRect(titleBikeX + 6, titleBikeY + 9, 1, 2, tf.color);
+    drawRect(titleBikeX + 3, titleBikeY + 9, 3, 1, tf.hi);
+    drawRect(titleBikeX + 7, titleBikeY + 8, 2, 1, tf.hi);
+
+    // Trail sparkles under the title biker for unlocked rides
+    if (tf.trail && gameTime % 4 === 0) {
+        spawnParticles(titleBikeX + 2 + Math.random() * 6, titleBikeY + 13, tf.trail, 1, 0.7);
+    }
 
     // Legs (animated pedaling)
     if (frame === 0) {
@@ -908,8 +914,8 @@ function renderTitleScreen() {
         drawRect(titleBikeX + 3, titleBikeY + 9, 2, 1, PAL.shoe);
         drawRect(titleBikeX + 6, titleBikeY + 10, 2, 1, PAL.shoe);
     }
-    drawRect(titleBikeX + 3, titleBikeY + 4, 5, 4, PAL.shirt);
-    drawPixel(titleBikeX + 4, titleBikeY + 4, PAL.shirtHi);
+    drawRect(titleBikeX + 3, titleBikeY + 4, 5, 4, tf.shirt);
+    drawPixel(titleBikeX + 4, titleBikeY + 4, tf.shirtHi);
     drawRect(titleBikeX + 7, titleBikeY + 5, 2, 2, PAL.skin);
     drawPixel(titleBikeX + 2, titleBikeY + 5, PAL.skin);
     drawRect(titleBikeX + 3, titleBikeY + 1, 5, 3, PAL.skin);
@@ -918,6 +924,17 @@ function renderTitleScreen() {
     drawPixel(titleBikeX + 4, titleBikeY, PAL.hairHi);
     drawPixel(titleBikeX + 5, titleBikeY + 2, PAL.black);
     drawPixel(titleBikeX + 7, titleBikeY + 2, PAL.black);
+
+    // Trail particles under the biker
+    updateParticles();
+    for (const pt of particles) {
+        bctx.globalAlpha = pt.life / pt.maxLife;
+        drawRect(pt.x, pt.y, pt.size, pt.size, pt.color);
+    }
+    bctx.globalAlpha = 1;
+
+    // Current ride name
+    drawPixelText('RIDE: ' + tf.name, W / 2, titleBikeY + 22, tf.trail || '#999999', 'center');
 
     // Controls info
     const blink = Math.sin(gameTime * 0.1) > 0;
