@@ -1057,8 +1057,6 @@ function startGame() {
 // ── Main game loop (started after all scripts load) ──
 function gameLoop() {
     gameTime++;
-    // Engine hum follows 3D state every frame (also fades out on menu/2D)
-    if (typeof g3Hum === 'function') g3Hum();
     if (state === 'title') {
         renderTitleScreen();
     } else if (gameMode === '3d') {
