@@ -409,7 +409,11 @@ function updateBike() {
             pRetry.className = 'blink';
             pRetry.style.marginTop = '16px';
             pRetry.textContent = 'Press ENTER or tap to retry';
-            overlay.append(pRetry);
+            const pMenu = document.createElement('p');
+            pMenu.style.fontSize = '11px';
+            pMenu.style.color = '#555';
+            pMenu.textContent = 'Press M for menu';
+            overlay.append(pRetry, pMenu);
             overlay.classList.remove('hidden');
         }
         return;
