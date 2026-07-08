@@ -82,6 +82,35 @@ describe('collision', () => {
     expect(g3HitCar(p, { lane: 1, z: 10 })).toBe(false);
   });
 
+  test('an airborne player above car height clears the car', () => {
+    const airborne = { lane: 1, x: -1, y: G3_CAR_TOP + 0.1 };
+    expect(g3HitCar(airborne, { lane: 1, z: 0.5 })).toBe(false);
+    expect(g3ClearedCar(airborne, { lane: 1, z: 0.5 })).toBe(true);
+  });
+
+  test('jump peak is high enough to clear a car with time to spare', () => {
+    // Simulate the jump arc and count frames spent above the car top
+    let y = 0, vy = G3_JUMP_VY, frames = 0;
+    while (y >= 0) {
+      y += vy;
+      vy -= G3_GRAVITY;
+      if (y >= G3_CAR_TOP) frames++;
+    }
+    expect(frames).toBeGreaterThan(15);
+  });
+
+  test('clearing a car awards a distance bonus', () => {
+    g3Player.y = G3_CAR_TOP + 0.5;
+    g3Player.onGround = false;
+    g3Player.vy = 0.1;
+    g3Cars = [{ lane: g3Player.lane, z: 0, fwd: 0.1, color: [1, 0, 0] }];
+    const before = g3Dist;
+    update3D();
+    expect(state).toBe('playing');
+    expect(g3Dist).toBeGreaterThan(before + G3_CLEAR_BONUS - 1);
+    expect(g3Cars[0].cleared).toBe(true);
+  });
+
   test('fish can be jumped over', () => {
     const fish = { x: -1, z: 0, y: 0.2 };
     expect(g3HitFish({ lane: 1, x: -1, y: 0 }, fish)).toBe(true);

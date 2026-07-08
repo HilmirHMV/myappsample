@@ -139,6 +139,13 @@ document.addEventListener('keydown', e => {
         return;
     }
     if (state === 'paused') return;
+    // Buffer 3D jumps at the event level so a quick tap between
+    // animation frames still registers
+    if (state === 'playing' && gameMode === '3d' &&
+        (e.code === 'Space' || e.code === 'ArrowUp' || e.code === 'KeyW') &&
+        typeof g3QueueJump === 'function') {
+        g3QueueJump();
+    }
     if (state === 'title') {
         // Menu: arrows choose mode, Enter/Space start
         if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'KeyW', 'KeyS', 'KeyA', 'KeyD'].includes(e.code)) {
@@ -357,6 +364,10 @@ const SFX = {
         setTimeout(() => playTone(300, 0.12, 'sawtooth', 0.13, 80), 100);
         setTimeout(() => playTone(200, 0.2, 'sawtooth', 0.12, 50), 220);
         setTimeout(() => playTone(1047, 0.3, 'square', 0.1), 450);
+    },
+    splash() {
+        playTone(900, 0.08, 'triangle', 0.06, 300);
+        setTimeout(() => playTone(500, 0.1, 'triangle', 0.05, 200), 50);
     }
 };
 
@@ -379,7 +390,9 @@ function startMusic() {
         if (!musicPlaying) return;
 
         // Boost mode: double-time, octave-up bass, denser melody, arpeggio
-        const boost = state === 'playing' && invulnTimer > 0;
+        // (each mode has its own boost timer)
+        const boostTimer = (gameMode === '3d' && typeof g3Invuln !== 'undefined') ? g3Invuln : invulnTimer;
+        const boost = state === 'playing' && boostTimer > 0;
         const bpm = boost ? 210 : 140;
         const stepTime = 60 / bpm / 2;
 
@@ -1044,6 +1057,8 @@ function startGame() {
 // ── Main game loop (started after all scripts load) ──
 function gameLoop() {
     gameTime++;
+    // Engine hum follows 3D state every frame (also fades out on menu/2D)
+    if (typeof g3Hum === 'function') g3Hum();
     if (state === 'title') {
         renderTitleScreen();
     } else if (gameMode === '3d') {

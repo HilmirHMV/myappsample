@@ -9,8 +9,10 @@ let g3Ready = false;
 
 // ── 3D gameplay constants ──
 const G3_LANES = [-3, -1, 1, 3];
-const G3_GRAVITY = 0.018;
-const G3_JUMP_VY = 0.28;
+const G3_GRAVITY = 0.014;
+const G3_JUMP_VY = 0.34;
+const G3_CAR_TOP = 1.6;   // airborne above this clears a car
+const G3_CLEAR_BONUS = 5; // distance bonus for clearing a car
 const G3_BASE_SPEED = 0.35;
 const G3_BOOST_BONUS = 0.5;
 const G3_INVULN_TIME = 180;
@@ -52,7 +54,11 @@ function g3SpeedFor(dist, invuln) {
 
 // Pure collision helpers (player is at z=0)
 function g3HitCar(p, car) {
-    return car.lane === p.lane && Math.abs(car.z) < 1.6 && p.y < 2.0;
+    return car.lane === p.lane && Math.abs(car.z) < 1.6 && p.y < G3_CAR_TOP;
+}
+// A car passing under an airborne player counts as a clean clear
+function g3ClearedCar(p, car) {
+    return car.lane === p.lane && Math.abs(car.z) < 1.6 && p.y >= G3_CAR_TOP;
 }
 function g3HitFish(p, f) {
     return Math.abs(f.x - p.x) < 1.1 && Math.abs(f.z) < 1.3 && p.y < 0.9 + f.y;
@@ -75,6 +81,7 @@ function start3DMode() {
     g3FishTimer = 200;
     g3ChocoTimer = 320;
     g3Shake = 0;
+    g3JumpBuf = 0;
 }
 
 function g3MoveLeft() {
@@ -89,6 +96,13 @@ function g3Jump() {
         g3Player.onGround = false;
         SFX.nearMiss();
     }
+}
+
+// Jump buffer: a tap between frames still jumps on the next update,
+// and a press just before landing triggers the moment we touch down
+let g3JumpBuf = 0;
+function g3QueueJump() {
+    g3JumpBuf = 8;
 }
 
 // ── Spawners ──
@@ -144,6 +158,10 @@ function update3D() {
     if (left && !p._ml) { g3MoveLeft(); p._ml = true; } else if (!left) p._ml = false;
     if (right && !p._mr) { g3MoveRight(); p._mr = true; } else if (!right) p._mr = false;
     if (keys['Space'] || keys['ArrowUp'] || keys['KeyW']) g3Jump();
+    if (g3JumpBuf > 0) {
+        g3JumpBuf--;
+        if (p.onGround) { g3Jump(); g3JumpBuf = 0; }
+    }
 
     // Physics
     p.x = lerp(p.x, g3LaneX(p.lane), 0.18);
@@ -151,7 +169,10 @@ function update3D() {
     if (!p.onGround) {
         p.y += p.vy;
         p.vy -= G3_GRAVITY;
-        if (p.y <= 0) { p.y = 0; p.vy = 0; p.onGround = true; }
+        if (p.y <= 0) {
+            p.y = 0; p.vy = 0; p.onGround = true;
+            g3Burst(p.x, 0.05, 0.8, [0.6, 0.6, 0.6], 5, 0.12); // landing puff
+        }
     }
 
     // Speed & distance
@@ -187,6 +208,16 @@ function update3D() {
         f.z += g3Speed * 0.9;
         f.wob += 0.15;
         f.yy = f.y + Math.sin(f.wob) * 0.15;
+
+        // Splash when crossing the road edge (entering or leaving)
+        const onRoad = Math.abs(f.x) < 4.4;
+        if (f.wasOnRoad !== undefined && onRoad !== f.wasOnRoad) {
+            const edgeX = f.x > 0 ? 4.4 : -4.4;
+            g3Burst(edgeX, 0.2, f.z, [0.7, 0.85, 1.0], 8, 0.15);
+            g3Burst(edgeX, 0.2, f.z, [1, 1, 1], 4, 0.1);
+            if (f.z > -50) SFX.splash(); // only audible when close
+        }
+        f.wasOnRoad = onRoad;
     }
     g3Fish = g3Fish.filter(f => f.z < G3_KILL_Z && f.x > -9 && f.x < 9 && !f.dead);
 
@@ -199,6 +230,16 @@ function update3D() {
         pt.life--;
     }
     g3Parts = g3Parts.filter(pt => pt.life > 0);
+
+    // Reward clean jumps over cars
+    for (const c of g3Cars) {
+        if (!c.cleared && g3ClearedCar(p, c)) {
+            c.cleared = true;
+            g3Dist += G3_CLEAR_BONUS;
+            g3Burst(p.x, p.y + 0.5, 0, [0.3, 1.0, 1.0], 6, 0.2);
+            SFX.combo();
+        }
+    }
 
     // Collisions
     for (const c of g3Cars) {
@@ -506,6 +547,18 @@ function render3D() {
         g3Box(5.5, 0.6, pz, 0.15, 1.2, 0.15, [0.9, 0.9, 0.9]);
     }
 
+    // Shadows (flat dark boxes — cheap but sells height and position)
+    const shadow = [road[0] * 0.55, road[1] * 0.55, road[2] * 0.55];
+    // Player shadow shrinks as they rise
+    const shScale = Math.max(0.3, 1 - g3Player.y * 0.22);
+    g3Box(g3Player.x, 0.44, 0, 0.9 * shScale, 0.02, 1.9 * shScale, shadow);
+    for (const c of g3Cars) {
+        g3Box(g3LaneX(c.lane), 0.44, c.z, 1.6, 0.02, 2.7, shadow);
+    }
+    for (const f of g3Fish) {
+        if (Math.abs(f.x) < 4.2) g3Box(f.x, 0.44, f.z, 0.8, 0.02, 0.4, shadow);
+    }
+
     // Chocolate pickups
     for (const c of g3Chocos) {
         if (c.taken) continue;
@@ -580,4 +633,32 @@ function g3Touch(clientX) {
     if (frac < 0.35) g3MoveLeft();
     else if (frac > 0.65) g3MoveRight();
     else g3Jump();
+}
+
+// ── Engine hum: continuous low drone whose pitch follows speed ──
+let g3HumOsc = null;
+let g3HumGain = null;
+
+function g3Hum() {
+    // Never create the AudioContext here — that must happen on a user
+    // gesture (unlockAudio). Only attach once the context exists.
+    if (!audioCtx) return;
+    if (!g3HumOsc) {
+        g3HumOsc = audioCtx.createOscillator();
+        g3HumGain = audioCtx.createGain();
+        g3HumOsc.type = 'sawtooth';
+        g3HumOsc.frequency.value = 70;
+        g3HumGain.gain.value = 0;
+        g3HumOsc.connect(g3HumGain);
+        g3HumGain.connect(audioCtx.destination);
+        g3HumOsc.start();
+    }
+    const active = state === 'playing' && gameMode === '3d';
+    const t = audioCtx.currentTime;
+    g3HumGain.gain.setTargetAtTime(active ? 0.02 : 0, t, 0.1);
+    if (active) {
+        // Pitch rises with speed; boost adds an extra growl
+        const freq = 55 + g3Speed * 90 + (g3Invuln > 0 ? 45 : 0);
+        g3HumOsc.frequency.setTargetAtTime(freq, t, 0.15);
+    }
 }
