@@ -102,13 +102,27 @@ describe('power-ups', () => {
     expect(bikeShield).toBe(true);
   });
 
-  test('bell pickup clears all fish', () => {
+  test('bell shockwave clears all fish and cars', () => {
     bikeFish = [
       { x: 50, y: 50, w: 10, h: 6, timer: 0 },
       { x: 80, y: 80, w: 10, h: 6, timer: 0 },
     ];
+    bikeObstacles = [
+      { x: 60, y: 60, w: 12, h: 20, color: '#cc3333' },
+    ];
     applyPickup({ x: 50, y: 50, w: 10, h: 10, type: 'bell' }, bike);
     expect(bikeFish.length).toBe(0);
+    expect(bikeObstacles.length).toBe(0);
+  });
+
+  test('bell shockwave counts cars toward destroy missions', () => {
+    mission = { type: 'destroy', n: 2, text: 'x', progress: 0, done: false };
+    bikeObstacles = [
+      { x: 60, y: 60, w: 12, h: 20, color: '#cc3333' },
+      { x: 90, y: 90, w: 12, h: 20, color: '#3366cc' },
+    ];
+    applyPickup({ x: 50, y: 50, w: 10, h: 10, type: 'bell' }, bike);
+    expect(mission.done).toBe(true);
   });
 
   test('magnet pickup starts the magnet timer', () => {
