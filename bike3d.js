@@ -10,7 +10,7 @@ let g3Ready = false;
 // ── 3D gameplay constants ──
 const G3_LANES = [-3, -1, 1, 3];
 const G3_GRAVITY = 0.014;
-const G3_JUMP_VY = 0.34;
+const G3_JUMP_VY = 0.30;
 const G3_CAR_TOP = 1.6;   // airborne above this clears a car
 const G3_CLEAR_BONUS = 5; // distance bonus for clearing a car
 const G3_BASE_SPEED = 0.35;
@@ -633,32 +633,4 @@ function g3Touch(clientX) {
     if (frac < 0.35) g3MoveLeft();
     else if (frac > 0.65) g3MoveRight();
     else g3Jump();
-}
-
-// ── Engine hum: continuous low drone whose pitch follows speed ──
-let g3HumOsc = null;
-let g3HumGain = null;
-
-function g3Hum() {
-    // Never create the AudioContext here — that must happen on a user
-    // gesture (unlockAudio). Only attach once the context exists.
-    if (!audioCtx) return;
-    if (!g3HumOsc) {
-        g3HumOsc = audioCtx.createOscillator();
-        g3HumGain = audioCtx.createGain();
-        g3HumOsc.type = 'sawtooth';
-        g3HumOsc.frequency.value = 70;
-        g3HumGain.gain.value = 0;
-        g3HumOsc.connect(g3HumGain);
-        g3HumGain.connect(audioCtx.destination);
-        g3HumOsc.start();
-    }
-    const active = state === 'playing' && gameMode === '3d';
-    const t = audioCtx.currentTime;
-    g3HumGain.gain.setTargetAtTime(active ? 0.02 : 0, t, 0.1);
-    if (active) {
-        // Pitch rises with speed; boost adds an extra growl
-        const freq = 55 + g3Speed * 90 + (g3Invuln > 0 ? 45 : 0);
-        g3HumOsc.frequency.setTargetAtTime(freq, t, 0.15);
-    }
 }
