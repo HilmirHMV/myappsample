@@ -91,6 +91,88 @@ function currentTheme() {
     return ROAD_THEMES[(level - 1) % ROAD_THEMES.length];
 }
 
+// ── Power-ups (beyond chocolate) ──
+let bikePickups = [];
+let bikePickupTimer = 0;
+let bikeShield = false;
+let magnetTimer = 0;
+const PICKUP_TYPES = ['shield', 'bell', 'magnet'];
+const PICKUP_SPAWN_MIN = 700;   // frames between pickup spawns
+const PICKUP_SPAWN_RANGE = 500;
+const MAGNET_DURATION = 360;    // ~6 seconds
+const MAGNET_RANGE = 70;
+const SHIELD_MERCY_FRAMES = 45; // brief invulnerability after shield breaks
+
+// ── Boss (every 5th level) ──
+let boss = null;
+const BOSS_LEVEL_INTERVAL = 5;
+const BOSS_HP = 3;
+
+function isBossLevel(lvl) {
+    return lvl % BOSS_LEVEL_INTERVAL === 0;
+}
+
+// ── Missions (optional per-level objective) ──
+let mission = null;
+const MISSION_REWARD = 100;
+const MISSION_TYPES = [
+    { type: 'nearmiss', n: 3, text: 'GET 3 NEAR MISSES' },
+    { type: 'choco', n: 1, text: 'GRAB A CHOCOLATE' },
+    { type: 'destroy', n: 2, text: 'SMASH 2 VEHICLES' },
+];
+
+function pickMission() {
+    const m = MISSION_TYPES[Math.floor(Math.random() * MISSION_TYPES.length)];
+    return { type: m.type, n: m.n, text: m.text, progress: 0, done: false };
+}
+
+function missionProgress(type, amount) {
+    if (!mission || mission.done || mission.type !== type) return;
+    mission.progress += amount || 1;
+    if (mission.progress >= mission.n) {
+        mission.done = true;
+        score += MISSION_REWARD;
+        SFX.mission();
+        spawnFloatingText(W / 2, H / 2 - 40, 'MISSION! +' + MISSION_REWARD, '#44ff88');
+    }
+}
+
+// ── Wave pacing: brief calm windows between intense stretches ──
+let waveTimer = 0;
+const WAVE_CYCLE = 900;   // ~15s cycle
+const WAVE_CALM = 180;    // last ~3s of each cycle is calm
+
+function inCalmWindow() {
+    return (waveTimer % WAVE_CYCLE) >= (WAVE_CYCLE - WAVE_CALM);
+}
+
+// ── Persistent progression: total distance unlocks bike frame colors ──
+let totalDistance = 0;
+try {
+    totalDistance = parseInt(localStorage.getItem('bikeTotalDist') || '0');
+} catch (e) {
+    // localStorage unavailable — progression won't persist
+}
+const FRAME_UNLOCKS = [
+    { dist: 0,     color: '#444444', hi: '#777777', name: 'CLASSIC' },
+    { dist: 1000,  color: '#aa2222', hi: '#dd5555', name: 'RED ROCKET' },
+    { dist: 2500,  color: '#2255bb', hi: '#5588ee', name: 'BLUE BLAZE' },
+    { dist: 5000,  color: '#bb9911', hi: '#ffcc33', name: 'GOLD GLIDER' },
+    { dist: 10000, color: '#aa44aa', hi: '#dd77dd', name: 'NEON NIGHT' },
+];
+
+function currentFrame() {
+    let best = FRAME_UNLOCKS[0];
+    for (const u of FRAME_UNLOCKS) {
+        if (totalDistance >= u.dist) best = u;
+    }
+    return best;
+}
+
+function newUnlocks(before, after) {
+    return FRAME_UNLOCKS.filter(u => u.dist > before && u.dist <= after);
+}
+
 // ── Start bike mode ──
 function startBikeMode() {
     const roadW = ROAD_RIGHT - ROAD_LEFT;
@@ -123,6 +205,27 @@ function startBikeMode() {
     levelFlash = 0;
     nearMissCombo = 0;
     nearMissTimer = 0;
+    bikePickups = [];
+    bikePickupTimer = PICKUP_SPAWN_MIN;
+    bikeShield = false;
+    magnetTimer = 0;
+    waveTimer = 0;
+    hitStop = 0;
+    startLevel();
+}
+
+// Per-level setup: mission and boss
+function startLevel() {
+    mission = pickMission();
+    boss = null;
+    if (isBossLevel(level)) {
+        boss = {
+            x: W / 2 - 8, y: -30, w: 16, h: 28,
+            lane: 1, hp: BOSS_HP,
+            laneTimer: 0, hitFlash: 0,
+            nearMissed: true // bosses don't count for near-miss
+        };
+    }
 }
 
 // ── Spawners ──
@@ -176,6 +279,18 @@ function spawnBikeChocolate() {
     });
 }
 
+function spawnBikePickup() {
+    const lane = Math.floor(Math.random() * 4);
+    const lx = bikeLanes[lane];
+    const type = PICKUP_TYPES[Math.floor(Math.random() * PICKUP_TYPES.length)];
+    bikePickups.push({
+        x: lx - 5, y: -12,
+        w: 10, h: 10,
+        vy: CHOCO_SPEED * bikeSpeed,
+        type, collected: false, animTimer: 0
+    });
+}
+
 // ── Near-miss detection ──
 function checkNearMiss(b) {
     const bCx = b.x + b.w / 2;
@@ -203,6 +318,8 @@ function checkNearMiss(b) {
                 spawnFloatingText(bCx, b.y - 8, 'CLOSE! +' + bonus, '#44ffff');
             }
             spawnParticles(bCx, bCy, '#44ffff', 3, 1.5);
+            vibrate(20);
+            missionProgress('nearmiss');
         }
     }
 
@@ -223,6 +340,8 @@ function checkNearMiss(b) {
             SFX.nearMiss();
             spawnFloatingText(bCx, b.y - 8, 'CLOSE! +' + bonus, '#44ffff');
             spawnParticles(bCx, bCy, '#44ffff', 3, 1.5);
+            vibrate(20);
+            missionProgress('nearmiss');
         }
     }
 }
@@ -245,6 +364,17 @@ function updateBike() {
                     // localStorage unavailable — high score won't persist
                 }
             }
+            // Persistent progression: bank this run's distance
+            const prevTotal = totalDistance;
+            totalDistance += score;
+            try {
+                localStorage.setItem('bikeTotalDist', totalDistance);
+            } catch (e) {
+                // localStorage unavailable — progression won't persist
+            }
+            const unlocked = newUnlocks(prevTotal, totalDistance);
+            if (unlocked.length > 0) SFX.unlock();
+
             overlay.textContent = '';
             const h = document.createElement('h1');
             h.style.color = '#ff4444';
@@ -253,11 +383,31 @@ function updateBike() {
             pStats.textContent = `Level: ${level} | Distance: ${score}`;
             const pBest = document.createElement('p');
             pBest.textContent = `Best: ${bikeHighScore}`;
+            const pTotal = document.createElement('p');
+            pTotal.style.fontSize = '11px';
+            pTotal.style.color = '#888';
+            pTotal.textContent = `Total distance: ${totalDistance}`;
+            overlay.append(h, pStats, pBest, pTotal);
+            for (const u of unlocked) {
+                const pU = document.createElement('p');
+                pU.style.color = u.hi;
+                pU.style.marginTop = '8px';
+                pU.textContent = `★ NEW BIKE UNLOCKED: ${u.name}!`;
+                overlay.append(pU);
+            }
+            const nextU = FRAME_UNLOCKS.find(u => u.dist > totalDistance);
+            if (nextU) {
+                const pN = document.createElement('p');
+                pN.style.fontSize = '11px';
+                pN.style.color = '#666';
+                pN.textContent = `Next bike at ${nextU.dist} total`;
+                overlay.append(pN);
+            }
             const pRetry = document.createElement('p');
             pRetry.className = 'blink';
             pRetry.style.marginTop = '16px';
             pRetry.textContent = 'Press ENTER or tap to retry';
-            overlay.append(h, pStats, pBest, pRetry);
+            overlay.append(pRetry);
             overlay.classList.remove('hidden');
         }
         return;
@@ -330,6 +480,7 @@ function updateBike() {
         bikeObstacles = bikeObstacles.filter(ob => { ob.y += ob.vy; return ob.y > -40 && ob.y < H + 40; });
         bikeFish = bikeFish.filter(f => { f.x += f.vx; return f.x > -20 && f.x < W + 20; });
         bikeChocolates = [];
+        bikePickups = [];
         updateScenery(0.3);
         if (levelCompleteTimer <= 0) {
             levelComplete = false;
@@ -368,9 +519,9 @@ function updateBike() {
         spawnParticles(b.x + 5, b.y + 14, '#888888', 1, 0.5);
     }
 
-    // Level completion
+    // Level completion (boss levels require the boss defeated first)
     const needed = levelDistance(level);
-    if (levelScroll / SCORE_DIVISOR >= needed) {
+    if (levelScroll / SCORE_DIVISOR >= needed && !boss) {
         level++;
         levelComplete = true;
         levelCompleteTimer = LEVEL_TRANSITION_TIME;
@@ -382,18 +533,23 @@ function updateBike() {
             spawnParticles(W / 2 + (Math.random() - 0.5) * 100, H / 2 + (Math.random() - 0.5) * 60, '#ffcc00', 4, 3);
             spawnParticles(W / 2 + (Math.random() - 0.5) * 100, H / 2 + (Math.random() - 0.5) * 60, '#44ff44', 3, 2);
         }
+        startLevel();
     }
 
-    // Spawn obstacles
+    // Wave pacing
+    waveTimer++;
+    const calm = inCalmWindow();
+
+    // Spawn obstacles (paused during calm windows)
     bikeNextSpawn--;
-    if (bikeNextSpawn <= 0) {
+    if (bikeNextSpawn <= 0 && !calm) {
         spawnCarObstacle();
         bikeNextSpawn = levelCarSpawnRate();
         if (level >= 3 && Math.random() < 0.3) spawnCarObstacle();
     }
 
     bikeFishTimer--;
-    if (bikeFishTimer <= 0) {
+    if (bikeFishTimer <= 0 && !calm) {
         spawnBikeFish();
         bikeFishTimer = levelFishSpawnRate();
     }
@@ -402,6 +558,28 @@ function updateBike() {
     if (bikeChocoTimer <= 0) {
         spawnBikeChocolate();
         bikeChocoTimer = levelChocoSpawnRate();
+    }
+
+    bikePickupTimer--;
+    if (bikePickupTimer <= 0) {
+        spawnBikePickup();
+        bikePickupTimer = PICKUP_SPAWN_MIN + Math.random() * PICKUP_SPAWN_RANGE;
+    }
+
+    // Boss AI: hovers in the top half, hunts the player's lane
+    if (boss) {
+        boss.y = lerp(boss.y, 36, 0.03);
+        boss.laneTimer--;
+        boss.hitFlash = Math.max(0, boss.hitFlash - 1);
+        if (boss.laneTimer <= 0) {
+            if (boss.lane < b.lane) boss.lane++;
+            else if (boss.lane > b.lane) boss.lane--;
+            boss.laneTimer = Math.max(30, 70 - level * 2);
+        }
+        boss.x = lerp(boss.x, bikeLanes[boss.lane] - boss.w / 2, 0.05);
+        if (gameTime % 8 === 0) {
+            spawnParticles(boss.x + boss.w / 2, boss.y + boss.h, '#666666', 1, 1);
+        }
     }
 
     // Update cars
@@ -451,14 +629,27 @@ function updateBike() {
     }
     bikeFish = bikeFish.filter(f => f.x > -20 && f.x < W + 20);
 
-    // Update chocolates
+    // Update chocolates (magnet pulls them toward the biker)
     for (const ch of bikeChocolates) {
         ch.y += ch.vy;
         ch.animTimer++;
+        if (magnetTimer > 0) magnetPull(ch, b);
     }
     bikeChocolates = bikeChocolates.filter(ch => ch.y < H + 20);
 
+    // Update pickups
+    for (const pu of bikePickups) {
+        pu.y += pu.vy;
+        pu.animTimer++;
+        if (magnetTimer > 0) magnetPull(pu, b);
+    }
+    bikePickups = bikePickups.filter(pu => pu.y < H + 20);
+
     if (invulnTimer > 0) invulnTimer--;
+    if (magnetTimer > 0) {
+        magnetTimer--;
+        if (gameTime % 4 === 0) spawnParticles(b.x + 5, b.y + 7, '#ff6688', 1, 1.2);
+    }
 
     // Near-miss check (before collision, so we detect near misses on the same frame)
     const bNear = { x: b.x + COLLISION_PAD_X, y: b.y + COLLISION_PAD_Y, w: b.w - COLLISION_PAD_W, h: b.h - COLLISION_PAD_H };
@@ -475,12 +666,11 @@ function updateBike() {
                 spawnParticles(ob.x + 6, ob.y + 10, '#ffcc00', 6, 3);
                 screenShake = 4;
                 SFX.destroy();
+                missionProgress('destroy');
+            } else if (bikeShield) {
+                shieldAbsorb(ob, b);
             } else {
-                b.alive = false; b.deathTimer = 0;
-                screenShake = 10;
-                spawnParticles(b.x + 5, b.y + 7, PAL.red, 15, 4);
-                spawnParticles(b.x + 5, b.y + 7, '#888', 10, 3);
-                SFX.death();
+                killBiker(b, ob.color);
                 return;
             }
         }
@@ -495,16 +685,46 @@ function updateBike() {
                 spawnParticles(f.x + 5, f.y + 3, '#ffcc00', 6, 3);
                 screenShake = 3;
                 SFX.destroy();
+            } else if (bikeShield) {
+                shieldAbsorb(f, b);
             } else {
-                b.alive = false; b.deathTimer = 0;
-                screenShake = 8;
-                spawnParticles(b.x + 5, b.y + 7, PAL.fishBody, 12, 4);
-                SFX.death();
+                killBiker(b, PAL.fishBody);
                 return;
             }
         }
     }
     bikeFish = bikeFish.filter(f => !f.destroyed);
+
+    // Boss collision
+    if (boss && aabb(bHit, boss)) {
+        if (invulnTimer > 0) {
+            // hitFlash doubles as a damage cooldown so one overlap = one hit
+            if (boss.hitFlash <= 0) {
+                boss.hp--;
+                boss.hitFlash = 20;
+                boss.y -= 15; // knockback
+                screenShake = 6;
+                spawnParticles(boss.x + boss.w / 2, boss.y + boss.h / 2, '#883333', 10, 4);
+                if (boss.hp <= 0) {
+                    spawnParticles(boss.x + boss.w / 2, boss.y + boss.h / 2, '#ffcc00', 20, 5);
+                    spawnParticles(boss.x + boss.w / 2, boss.y + boss.h / 2, '#ff4444', 15, 4);
+                    score += 200;
+                    spawnFloatingText(W / 2, H / 2 - 20, 'BOSS DOWN! +200', '#ffcc00');
+                    SFX.bossDown();
+                    screenShake = 10;
+                    boss = null;
+                    missionProgress('destroy');
+                } else {
+                    SFX.bossHit();
+                }
+            }
+        } else if (bikeShield) {
+            shieldAbsorb(null, b); // shield saves you but doesn't hurt the boss
+        } else {
+            killBiker(b, '#883333');
+            return;
+        }
+    }
 
     for (const ch of bikeChocolates) {
         if (!ch.collected && aabb(bHit, ch)) {
@@ -514,13 +734,83 @@ function updateBike() {
             spawnParticles(ch.x + 5, ch.y + 4, '#ffcc00', 12, 4);
             spawnParticles(ch.x + 5, ch.y + 4, PAL.choco, 8, 3);
             SFX.pickup();
+            vibrate(40);
             spawnFloatingText(ch.x + 5, ch.y - 4, 'SUPER SPEED!', '#ffcc00');
+            missionProgress('choco');
         }
     }
+
+    for (const pu of bikePickups) {
+        if (!pu.collected && aabb(bHit, pu)) {
+            pu.collected = true;
+            vibrate(40);
+            applyPickup(pu, b);
+        }
+    }
+    bikePickups = bikePickups.filter(pu => !pu.collected);
 
     updateParticles();
     updateFloatingTexts();
     decayScreenShake();
+}
+
+// ── Power-up / collision helpers ──
+
+function magnetPull(item, b) {
+    const dx = (b.x + b.w / 2) - (item.x + item.w / 2);
+    const dy = (b.y + b.h / 2) - (item.y + item.h / 2);
+    const dist = Math.sqrt(dx * dx + dy * dy);
+    if (dist > 1 && dist < MAGNET_RANGE) {
+        const pull = 2.2 * (1 - dist / MAGNET_RANGE) + 0.6;
+        item.x += (dx / dist) * pull;
+        item.y += (dy / dist) * pull;
+    }
+}
+
+function shieldAbsorb(obstacle, b) {
+    bikeShield = false;
+    invulnTimer = SHIELD_MERCY_FRAMES;
+    if (obstacle) obstacle.destroyed = true;
+    screenShake = 6;
+    spawnParticles(b.x + 5, b.y + 7, '#44aaff', 15, 4);
+    SFX.shieldBreak();
+    vibrate(80);
+    spawnFloatingText(b.x + 5, b.y - 8, 'SHIELD LOST!', '#44aaff');
+}
+
+function killBiker(b, color) {
+    b.alive = false;
+    b.deathTimer = 0;
+    hitStop = 30; // slow-motion death
+    screenShake = 10;
+    spawnParticles(b.x + 5, b.y + 7, color, 15, 4);
+    spawnParticles(b.x + 5, b.y + 7, '#888', 10, 3);
+    SFX.death();
+    vibrate([100, 50, 200]);
+}
+
+function applyPickup(pu, b) {
+    if (pu.type === 'shield') {
+        bikeShield = true;
+        spawnParticles(pu.x + 5, pu.y + 5, '#44aaff', 12, 4);
+        SFX.shield();
+        spawnFloatingText(pu.x + 5, pu.y - 4, 'SHIELD!', '#44aaff');
+    } else if (pu.type === 'bell') {
+        let cleared = 0;
+        for (const f of bikeFish) {
+            spawnParticles(f.x + 5, f.y + 3, PAL.fishBody, 8, 4);
+            cleared++;
+        }
+        bikeFish = [];
+        screenShake = 5;
+        SFX.bell();
+        spawnFloatingText(pu.x + 5, pu.y - 4, cleared > 0 ? 'FISH BE GONE!' : 'RING!', '#ffdd44');
+    } else if (pu.type === 'magnet') {
+        magnetTimer = MAGNET_DURATION;
+        spawnParticles(pu.x + 5, pu.y + 5, '#ff6688', 12, 4);
+        SFX.magnet();
+        spawnFloatingText(pu.x + 5, pu.y - 4, 'MAGNET!', '#ff6688');
+    }
 }
 
 // ── Bike drawing ──
@@ -635,16 +925,27 @@ function drawBiker(bx, by) {
         }
     }
 
-    // Bicycle
+    // Shield bubble
+    if (bikeShield) {
+        const pulse = Math.sin(gameTime * 0.15) * 0.15 + 0.3;
+        bctx.globalAlpha = pulse;
+        drawRect(x - 3, y - 3, 16, 20, '#44aaff');
+        bctx.globalAlpha = 1;
+        drawPixel(x - 3, y + 3, '#88ccff');
+        drawPixel(x + 12, y + 8, '#88ccff');
+    }
+
+    // Bicycle (frame color from progression unlocks)
+    const fr = currentFrame();
     drawRect(x + 1, y + 11, 3, 3, '#444');
     drawPixel(x + 2, y + 12, '#888');
     drawRect(x + 7, y + 11, 3, 3, '#444');
     drawPixel(x + 8, y + 12, '#888');
-    drawRect(x + 3, y + 10, 5, 1, '#777');
-    drawRect(x + 4, y + 9, 1, 2, '#777');
-    drawRect(x + 6, y + 9, 1, 2, '#777');
-    drawRect(x + 3, y + 9, 3, 1, '#444');
-    drawRect(x + 7, y + 8, 2, 1, '#888');
+    drawRect(x + 3, y + 10, 5, 1, fr.color);
+    drawRect(x + 4, y + 9, 1, 2, fr.color);
+    drawRect(x + 6, y + 9, 1, 2, fr.color);
+    drawRect(x + 3, y + 9, 3, 1, fr.hi);
+    drawRect(x + 7, y + 8, 2, 1, fr.hi);
 
     if (frame === 0) {
         drawRect(x + 3, y + 8, 2, 2, PAL.pants);
@@ -696,9 +997,11 @@ function renderBike() {
     for (const ch of bikeChocolates) {
         if (!ch.collected) drawChocolate(ch, 0);
     }
+    for (const pu of bikePickups) drawPickup(pu);
 
     for (const ob of bikeObstacles) drawBikeCar(ob);
     for (const f of bikeFish) drawBikeFishSprite(f);
+    if (boss) drawBoss(boss);
 
     // Weather on top of road
     drawWeather();
@@ -765,7 +1068,52 @@ function renderBike() {
     if (nearMissCombo >= 2 && nearMissTimer > 0) {
         bctx.fillStyle = '#44ffff';
         bctx.textAlign = 'right';
-        bctx.fillText('x' + nearMissCombo, W - 4, 28);
+        bctx.fillText('x' + nearMissCombo, W - 4, 48);
+        bctx.textAlign = 'left';
+    }
+
+    // Mission tracker
+    if (mission && !levelComplete) {
+        bctx.font = '8px monospace';
+        if (mission.done) {
+            bctx.fillStyle = '#44ff88';
+            bctx.fillText('✓ ' + mission.text, 4, 28);
+        } else {
+            bctx.fillStyle = '#cccccc';
+            bctx.fillText(mission.text + ' (' + mission.progress + '/' + mission.n + ')', 4, 28);
+        }
+    }
+
+    // Boss HP
+    if (boss) {
+        bctx.fillStyle = '#ff4444';
+        bctx.textAlign = 'center';
+        bctx.fillText('BOSS', W / 2, 28);
+        bctx.textAlign = 'left';
+        for (let i = 0; i < BOSS_HP; i++) {
+            drawRect(W / 2 - 12 + i * 9, 31, 7, 3, i < boss.hp ? '#ff4444' : '#552222');
+        }
+    }
+
+    // Active effect indicators
+    let fxY = 36;
+    if (magnetTimer > 0) {
+        bctx.fillStyle = '#ff6688';
+        bctx.fillText('MAGNET ' + Math.ceil(magnetTimer / 60), 4, fxY);
+        fxY += 9;
+    }
+    if (bikeShield) {
+        bctx.fillStyle = '#44aaff';
+        bctx.fillText('SHIELD', 4, fxY);
+    }
+
+    // Calm window hint
+    if (inCalmWindow()) {
+        bctx.fillStyle = '#88dd88';
+        bctx.textAlign = 'center';
+        bctx.globalAlpha = 0.6 + Math.sin(gameTime * 0.1) * 0.3;
+        bctx.fillText('~ breather ~', W / 2, H - 8);
+        bctx.globalAlpha = 1;
         bctx.textAlign = 'left';
     }
 
@@ -786,6 +1134,107 @@ function renderBike() {
 
     bctx.restore();
 
+    // Pause button (mobile) and paused overlay — drawn without screen shake
+    drawPauseButton();
+    if (state === 'paused') {
+        bctx.globalAlpha = 0.7;
+        drawRect(0, 0, W, H, '#000000');
+        bctx.globalAlpha = 1;
+        bctx.fillStyle = '#ffffff';
+        bctx.font = '8px monospace';
+        bctx.textAlign = 'center';
+        bctx.fillText('PAUSED', W / 2, H / 2 - 4);
+        bctx.fillStyle = '#888888';
+        bctx.fillText(isMobile ? 'Tap ⏸ to resume' : 'Press P to resume', W / 2, H / 2 + 10);
+        bctx.textAlign = 'left';
+    }
+
     drawDpad();
     blitToScreen();
+}
+
+function drawPauseButton() {
+    if (!isMobile || (state !== 'playing' && state !== 'paused')) return;
+    bctx.globalAlpha = 0.4;
+    drawRect(PAUSE_BTN.x, PAUSE_BTN.y, PAUSE_BTN.w, PAUSE_BTN.h, '#222222');
+    drawRect(PAUSE_BTN.x + 1, PAUSE_BTN.y + 1, PAUSE_BTN.w - 2, PAUSE_BTN.h - 2, '#333333');
+    if (state === 'paused') {
+        // Play triangle
+        drawRect(PAUSE_BTN.x + 6, PAUSE_BTN.y + 4, 2, 8, '#ffffff');
+        drawRect(PAUSE_BTN.x + 8, PAUSE_BTN.y + 5, 2, 6, '#ffffff');
+        drawRect(PAUSE_BTN.x + 10, PAUSE_BTN.y + 6, 1, 4, '#ffffff');
+    } else {
+        // Pause bars
+        drawRect(PAUSE_BTN.x + 5, PAUSE_BTN.y + 4, 2, 8, '#ffffff');
+        drawRect(PAUSE_BTN.x + 9, PAUSE_BTN.y + 4, 2, 8, '#ffffff');
+    }
+    bctx.globalAlpha = 1;
+}
+
+// ── Pickup sprites ──
+function drawPickup(pu) {
+    if (pu.collected) return;
+    const bob = Math.sin(pu.animTimer * 0.08) * 2;
+    const x = Math.round(pu.x);
+    const y = Math.round(pu.y + bob);
+
+    if (pu.type === 'shield') {
+        drawRect(x + 2, y, 6, 2, '#2277cc');
+        drawRect(x + 1, y + 2, 8, 4, '#2277cc');
+        drawRect(x + 2, y + 6, 6, 2, '#2277cc');
+        drawRect(x + 3, y + 8, 4, 1, '#2277cc');
+        drawRect(x + 2, y + 1, 6, 5, '#44aaff');
+        drawRect(x + 4, y + 2, 2, 4, '#88ccff');
+        drawPixel(x + 3, y + 1, '#aaddff');
+    } else if (pu.type === 'bell') {
+        drawPixel(x + 4, y, '#886611');
+        drawPixel(x + 5, y, '#886611');
+        drawRect(x + 3, y + 1, 4, 2, '#ffcc33');
+        drawRect(x + 2, y + 3, 6, 3, '#ffcc33');
+        drawRect(x + 1, y + 6, 8, 1, '#ddaa22');
+        drawPixel(x + 4, y + 8, '#886611');
+        drawPixel(x + 3, y + 2, '#ffee88');
+    } else if (pu.type === 'magnet') {
+        drawRect(x + 1, y, 3, 6, '#dd3355');
+        drawRect(x + 6, y, 3, 6, '#dd3355');
+        drawRect(x + 1, y + 5, 8, 3, '#dd3355');
+        drawRect(x + 2, y + 1, 1, 4, '#ff6688');
+        drawRect(x + 7, y + 1, 1, 4, '#ff6688');
+        drawRect(x + 1, y, 3, 2, '#eeeeee');
+        drawRect(x + 6, y, 3, 2, '#eeeeee');
+    }
+}
+
+// ── Boss sprite: big menacing truck ──
+function drawBoss(bs) {
+    const x = Math.round(bs.x);
+    const y = Math.round(bs.y);
+    const flash = bs.hitFlash > 0 && bs.hitFlash % 2 === 0;
+    const body = flash ? '#ffffff' : '#882222';
+    const dark = flash ? '#dddddd' : '#661111';
+
+    // Trailer
+    drawRect(x, y + 8, 16, 20, body);
+    drawRect(x + 2, y + 10, 12, 14, dark);
+    // Cab
+    drawRect(x + 1, y, 14, 8, body);
+    drawRect(x + 3, y + 1, 10, 4, '#ffaa44');
+    drawPixel(x + 4, y + 2, '#ffdd88');
+    // Angry eyes on windshield
+    drawPixel(x + 5, y + 3, '#000');
+    drawPixel(x + 10, y + 3, '#000');
+    // Wheels
+    drawRect(x - 2, y + 2, 2, 5, '#111');
+    drawRect(x + 16, y + 2, 2, 5, '#111');
+    drawRect(x - 2, y + 12, 2, 6, '#111');
+    drawRect(x + 16, y + 12, 2, 6, '#111');
+    drawRect(x - 2, y + 21, 2, 6, '#111');
+    drawRect(x + 16, y + 21, 2, 6, '#111');
+    // Hazard stripes on rear
+    for (let i = 0; i < 4; i++) {
+        drawRect(x + 1 + i * 4, y + 26, 2, 2, i % 2 === 0 ? '#ffcc00' : '#111111');
+    }
+    // Menacing exhaust glow
+    drawPixel(x + 2, y - 1, '#ff6600');
+    drawPixel(x + 13, y - 1, '#ff6600');
 }

@@ -22,12 +22,13 @@ const bctx = buf.getContext('2d');
 bctx.imageSmoothingEnabled = false;
 
 // ── Game state ──
-let state = 'title'; // title | playing | dead
+let state = 'title'; // title | playing | paused | dead
 let score = 0;
 let particles = [];
 let screenShake = 0;
 let invulnTimer = 0;
 let gameTime = 0;
+let hitStop = 0; // slow-motion frames after a fatal collision
 
 // ── Seeded RNG ──
 const seededRandom = (function() {
@@ -87,9 +88,42 @@ function updateDpadFromTouches(e) {
     }
 }
 
+// ── Pause ──
+const PAUSE_BTN = { x: W - 18, y: 24, w: 16, h: 16 };
+
+function togglePause() {
+    if (state === 'playing') state = 'paused';
+    else if (state === 'paused') state = 'playing';
+}
+
+document.addEventListener('visibilitychange', () => {
+    if (document.hidden && state === 'playing') state = 'paused';
+});
+window.addEventListener('blur', () => {
+    if (state === 'playing') state = 'paused';
+});
+
+// ── Haptics (Android; iOS Safari has no vibration API) ──
+function vibrate(ms) {
+    try { if (navigator.vibrate) navigator.vibrate(ms); } catch (e) {}
+}
+
+function touchToGame(t) {
+    const rect = canvas.getBoundingClientRect();
+    return {
+        x: ((t.clientX - rect.left) / rect.width) * W,
+        y: ((t.clientY - rect.top) / rect.height) * H
+    };
+}
+
 document.addEventListener('keydown', e => {
     keys[e.code] = true;
     unlockAudio();
+    if (e.code === 'KeyP' || e.code === 'Escape') {
+        togglePause();
+        return;
+    }
+    if (state === 'paused') return;
     if (state === 'title' || state === 'dead') startGame();
 });
 document.addEventListener('keyup', e => { keys[e.code] = false; });
@@ -98,6 +132,14 @@ function handleTouchStart(e) {
     e.preventDefault();
     enableMobile();
     unlockAudio();
+    // Pause button check (playing or paused)
+    if (state === 'playing' || state === 'paused') {
+        for (let i = 0; i < e.changedTouches.length; i++) {
+            const g = touchToGame(e.changedTouches[i]);
+            if (pointInRect(g.x, g.y, PAUSE_BTN)) { togglePause(); return; }
+        }
+    }
+    if (state === 'paused') return;
     if (state === 'title' || state === 'dead') { startGame(); return; }
     updateDpadFromTouches(e);
 }
@@ -122,6 +164,7 @@ document.addEventListener('touchend', handleTouchEnd, { passive: false });
 document.addEventListener('touchcancel', handleTouchEnd, { passive: false });
 document.addEventListener('click', () => {
     unlockAudio();
+    if (state === 'paused') return;
     if (state === 'title' || state === 'dead') startGame();
 });
 
@@ -223,6 +266,38 @@ const SFX = {
         playTone(1200, 0.08, 'square', 0.1);
         setTimeout(() => playTone(1400, 0.06, 'square', 0.08), 60);
         setTimeout(() => playTone(1600, 0.08, 'square', 0.1), 110);
+    },
+    shield() {
+        playTone(330, 0.1, 'triangle', 0.12);
+        setTimeout(() => playTone(494, 0.12, 'triangle', 0.12), 90);
+    },
+    shieldBreak() {
+        playTone(494, 0.08, 'square', 0.15, 330);
+        setTimeout(() => playTone(247, 0.15, 'sawtooth', 0.12), 80);
+    },
+    bell() {
+        playTone(1319, 0.15, 'triangle', 0.14);
+        setTimeout(() => playTone(1047, 0.2, 'triangle', 0.1), 120);
+    },
+    magnet() {
+        playTone(200, 0.15, 'sine', 0.12, 600);
+    },
+    mission() {
+        const notes = [659, 784, 988, 1319];
+        notes.forEach((n, i) => setTimeout(() => playTone(n, 0.08, 'square', 0.1), i * 70));
+    },
+    unlock() {
+        const notes = [523, 659, 784, 1047, 1319];
+        notes.forEach((n, i) => setTimeout(() => playTone(n, 0.1, 'triangle', 0.12), i * 90));
+    },
+    bossHit() {
+        playTone(150, 0.1, 'sawtooth', 0.15, 80);
+    },
+    bossDown() {
+        playTone(400, 0.1, 'sawtooth', 0.15, 100);
+        setTimeout(() => playTone(300, 0.12, 'sawtooth', 0.13, 80), 100);
+        setTimeout(() => playTone(200, 0.2, 'sawtooth', 0.12, 50), 220);
+        setTimeout(() => playTone(1047, 0.3, 'square', 0.1), 450);
     }
 };
 
@@ -767,7 +842,7 @@ function renderTitleScreen() {
 
     bctx.fillStyle = '#666666';
     bctx.fillText('Arrows / WASD to move', W / 2, H - 40);
-    bctx.fillText('Collect chocolate!', W / 2, H - 28);
+    bctx.fillText('Collect chocolate! P = pause', W / 2, H - 28);
 
     // High score
     const hs = parseInt(localStorage.getItem('bikeHighScore') || '0');
@@ -805,7 +880,13 @@ function gameLoop() {
         renderTitleScreen();
     } else {
         if (state === 'playing') {
-            updateBike();
+            if (hitStop > 0) {
+                // Slow motion after fatal collision: update at 1/3 speed
+                hitStop--;
+                if (hitStop % 3 === 0) updateBike();
+            } else {
+                updateBike();
+            }
         }
         renderBike();
     }
