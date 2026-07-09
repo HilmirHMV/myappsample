@@ -368,6 +368,9 @@ const SFX = {
     splash() {
         playTone(900, 0.08, 'triangle', 0.06, 300);
         setTimeout(() => playTone(500, 0.1, 'triangle', 0.05, 200), 50);
+    },
+    boostTick() {
+        playTone(1100, 0.05, 'square', 0.09);
     }
 };
 

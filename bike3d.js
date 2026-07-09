@@ -178,7 +178,13 @@ function update3D() {
     // Speed & distance
     g3Speed = g3SpeedFor(g3Dist, g3Invuln);
     g3Dist += g3Speed * 0.35;
-    if (g3Invuln > 0) g3Invuln--;
+    if (g3Invuln > 0) {
+        g3Invuln--;
+        // Expiry warning: three ticks over the last second
+        if (g3Invuln > 0 && g3Invuln <= 60 && g3Invuln % 20 === 0) {
+            SFX.boostTick();
+        }
+    }
     if (g3Shake > 0) g3Shake *= 0.85;
 
     // Spawns
@@ -607,9 +613,16 @@ function render3D() {
     // Head + hair
     g3Box(px, 1.75 + py, 0.1, 0.35, 0.35, 0.35, [1.0, 0.8, 0.6]);
     g3Box(px, 1.98 + py, 0.05, 0.38, 0.15, 0.38, [0.87, 0.2, 0.13]);
-    // Invulnerability aura
-    if (g3Invuln > 0 && Math.floor(g3Invuln / 3) % 2 === 0) {
-        g3Box(px, 1.1 + py, 0, 0.9, 1.6, 1.9, [1.0, 0.85, 0.3]);
+    // Invulnerability aura: steady shimmer, then frantic white blink
+    // in the last second so the fade is unmistakable
+    if (g3Invuln > 60) {
+        if (Math.floor(g3Invuln / 5) % 3 !== 0) {
+            g3Box(px, 1.1 + py, 0, 0.9, 1.6, 1.9, [1.0, 0.85, 0.3]);
+        }
+    } else if (g3Invuln > 0) {
+        if (g3Invuln % 8 < 4) {
+            g3Box(px, 1.1 + py, 0, 0.9, 1.6, 1.9, [1.0, 1.0, 1.0]);
+        }
     }
 
     // Particles
@@ -621,10 +634,14 @@ function render3D() {
 // ── DOM HUD ──
 function updateHUD3D() {
     if (!hud3d) return;
+    const expiring = g3Invuln > 0 && g3Invuln <= 60;
     const boost = g3Invuln > 0 ? ` BOOST ${Math.ceil(g3Invuln / 60)}` : '';
     const paused = state === 'paused' ? ' — PAUSED (P)' : '';
     hud3d.textContent = `DIST ${g3Score()}  BEST ${g3Best}${boost}${paused}`;
-    hud3d.style.color = g3Invuln > 0 ? '#ffcc00' : '#ffffff';
+    // Gold while boosted, flashing red in the final second
+    hud3d.style.color = expiring
+        ? (g3Invuln % 8 < 4 ? '#ff4444' : '#ffffff')
+        : (g3Invuln > 0 ? '#ffcc00' : '#ffffff');
 }
 
 // 3D touch: left/right thirds steer, middle jumps
