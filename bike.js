@@ -654,7 +654,13 @@ function updateBike() {
     }
     bikePickups = bikePickups.filter(pu => pu.y < H + 20);
 
-    if (invulnTimer > 0) invulnTimer--;
+    if (invulnTimer > 0) {
+        invulnTimer--;
+        // Expiry warning: three ticks over the last second
+        if (invulnTimer > 0 && invulnTimer <= 60 && invulnTimer % 20 === 0) {
+            SFX.boostTick();
+        }
+    }
     if (magnetTimer > 0) {
         magnetTimer--;
         if (gameTime % 4 === 0) spawnParticles(b.x + 5, b.y + 7, '#ff6688', 1, 1.2);
@@ -942,11 +948,15 @@ function drawBiker(bx, by) {
     const frame = bike.pedalFrame;
 
     if (invulnTimer > 0) {
-        const pulse = Math.sin(invulnTimer * 0.3) * 0.3 + 0.5;
-        bctx.globalAlpha = pulse * (invulnTimer > 30 ? 1 : invulnTimer / 30);
-        drawRect(x - 2, y - 2, 14, 18, '#ffcc00');
-        bctx.globalAlpha = 1;
-        if (invulnTimer % 3 === 0) {
+        // Last second: rapid blink so the fade is unmistakable
+        const expiring = invulnTimer <= 60;
+        if (!expiring || invulnTimer % 8 < 4) {
+            const pulse = Math.sin(invulnTimer * 0.3) * 0.3 + 0.5;
+            bctx.globalAlpha = expiring ? 0.8 : pulse;
+            drawRect(x - 2, y - 2, 14, 18, expiring ? '#ffffff' : '#ffcc00');
+            bctx.globalAlpha = 1;
+        }
+        if (!expiring && invulnTimer % 3 === 0) {
             spawnParticles(bx + Math.random() * 10, by + Math.random() * 14, '#ffee44', 1, 1.5);
         }
     }
@@ -1072,6 +1082,13 @@ function renderBike() {
     const lvlFill = clamp((levelScroll / SCORE_DIVISOR) / needed, 0, 1);
     const lvlColor = lvlFill < 0.5 ? '#44bbff' : lvlFill < 0.8 ? '#44ff44' : '#ffcc00';
     drawRect(4, 14, Math.floor(lvlFill * barW), 4, lvlColor);
+
+    // Boost bar drains while the power-up is active, blinks near expiry
+    if (invulnTimer > 0) {
+        const boostW = Math.ceil((invulnTimer / INVULN_DURATION) * barW);
+        const warn = invulnTimer <= 60 && invulnTimer % 8 < 4;
+        drawRect(4, 19, boostW, 2, warn ? '#ffffff' : '#ffcc00');
+    }
 
     // Theme name on level start
     if (levelScroll / SCORE_DIVISOR < 30) {
