@@ -168,18 +168,26 @@ document.addEventListener('keyup', e => { keys[e.code] = false; });
 const MENU_PANEL_2D = { x: 16, y: 118, w: 160, h: 42 };
 const MENU_PANEL_3D = { x: 16, y: 168, w: 160, h: 42 };
 
+// 3D touch tracking: swipe up anywhere = jump, quick tap = steer.
+// Taps resolve on release so a swipe never steers by accident.
+const g3TouchState = {};
+const G3_SWIPE_UP_PX = 30;
+
 function handleTouchStart(e) {
     e.preventDefault();
     enableMobile();
     unlockAudio();
 
-    // 3D mode has its own touch scheme (left/right steer, middle jump,
+    // 3D mode has its own touch scheme (swipe up jumps, tap steers,
     // top strip pauses)
     if (gameMode === '3d' && (state === 'playing' || state === 'paused')) {
         const t = e.changedTouches[0];
         if (t.clientY < 60) { togglePause(); return; }
         if (state === 'paused') return;
-        g3Touch(t.clientX);
+        for (let i = 0; i < e.changedTouches.length; i++) {
+            const ct = e.changedTouches[i];
+            g3TouchState[ct.identifier] = { x: ct.clientX, y: ct.clientY, handled: false };
+        }
         return;
     }
 
@@ -204,11 +212,37 @@ function handleTouchStart(e) {
 }
 function handleTouchMove(e) {
     e.preventDefault();
+    if (gameMode === '3d') {
+        if (state !== 'playing') return;
+        // Upward swipe anywhere jumps, no matter how far left or right
+        for (let i = 0; i < e.changedTouches.length; i++) {
+            const ct = e.changedTouches[i];
+            const st = g3TouchState[ct.identifier];
+            if (st && !st.handled && st.y - ct.clientY > G3_SWIPE_UP_PX) {
+                st.handled = true;
+                g3QueueJump();
+            }
+        }
+        return;
+    }
     updateDpadFromTouches(e);
 }
 function handleTouchEnd(e) {
     e.preventDefault();
     unlockAudio();
+    if (gameMode === '3d' && (state === 'playing' || state === 'paused')) {
+        for (let i = 0; i < e.changedTouches.length; i++) {
+            const ct = e.changedTouches[i];
+            const st = g3TouchState[ct.identifier];
+            delete g3TouchState[ct.identifier];
+            if (state !== 'playing' || !st || st.handled) continue;
+            // A quick tap that never swiped: steer (middle still jumps)
+            const dx = Math.abs(ct.clientX - st.x);
+            const dy = Math.abs(ct.clientY - st.y);
+            if (dx < 20 && dy < 20) g3Touch(ct.clientX);
+        }
+        return;
+    }
     if (e.touches.length === 0) {
         touchActive = false;
         dpadUp = false; dpadDown = false; dpadLeft = false; dpadRight = false;
