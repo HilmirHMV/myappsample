@@ -371,6 +371,10 @@ const SFX = {
     },
     boostTick() {
         playTone(1100, 0.05, 'square', 0.09);
+    },
+    shockwave() {
+        playTone(1400, 0.25, 'sawtooth', 0.1, 200);
+        setTimeout(() => playTone(700, 0.15, 'square', 0.08, 150), 60);
     }
 };
 
