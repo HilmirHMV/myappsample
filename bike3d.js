@@ -13,11 +13,14 @@ const G3_GRAVITY = 0.014;
 const G3_JUMP_VY = 0.30;
 const G3_CAR_TOP = 1.6;   // airborne above this clears a car
 const G3_CLEAR_BONUS = 5; // distance bonus for clearing a car
-const G3_BASE_SPEED = 0.35;
+const G3_BASE_SPEED = 0.5;
 const G3_BOOST_BONUS = 0.5;
 const G3_INVULN_TIME = 180;
 const G3_SPAWN_Z = -120;
 const G3_KILL_Z = 8;
+const G3_CLEAR_BOOST_TIME = 75;  // frames of speed boost after clearing a car
+const G3_CLEAR_BOOST_SPD = 0.3;
+const G3_WAVE_SPEED = 1.4;       // shockwave travel speed down the lane
 
 // ── 3D game state ──
 let g3Player = { lane: 1, x: G3_LANES[1], y: 0, vy: 0, onGround: true, tilt: 0 };
@@ -25,6 +28,8 @@ let g3Cars = [];
 let g3Fish = [];
 let g3Chocos = [];
 let g3Parts = [];
+let g3Waves = [];
+let g3ClearBoost = 0;
 let g3Speed = G3_BASE_SPEED;
 let g3Dist = 0;
 let g3Invuln = 0;
@@ -82,6 +87,8 @@ function start3DMode() {
     g3ChocoTimer = 320;
     g3Shake = 0;
     g3JumpBuf = 0;
+    g3Waves = [];
+    g3ClearBoost = 0;
 }
 
 function g3MoveLeft() {
@@ -177,6 +184,14 @@ function update3D() {
 
     // Speed & distance
     g3Speed = g3SpeedFor(g3Dist, g3Invuln);
+    if (g3ClearBoost > 0) {
+        g3ClearBoost--;
+        g3Speed += G3_CLEAR_BOOST_SPD;
+        // Cyan speed trail while the clear boost lasts
+        if (gameTime % 3 === 0) {
+            g3Burst(p.x, 0.3, 1.2, [0.3, 1.0, 1.0], 1, 0.1);
+        }
+    }
     g3Dist += g3Speed * 0.35;
     if (g3Invuln > 0) {
         g3Invuln--;
@@ -237,15 +252,38 @@ function update3D() {
     }
     g3Parts = g3Parts.filter(pt => pt.life > 0);
 
-    // Reward clean jumps over cars
+    // Reward clean jumps over cars: bonus, shockwave down the lane,
+    // and a short speed boost
     for (const c of g3Cars) {
         if (!c.cleared && g3ClearedCar(p, c)) {
             c.cleared = true;
             g3Dist += G3_CLEAR_BONUS;
+            g3ClearBoost = G3_CLEAR_BOOST_TIME;
+            g3Waves.push({ lane: c.lane, z: -1, age: 0 });
             g3Burst(p.x, p.y + 0.5, 0, [0.3, 1.0, 1.0], 6, 0.2);
             SFX.combo();
+            SFX.shockwave();
         }
     }
+
+    // Shockwaves race forward, smashing cars in their lane
+    for (const w of g3Waves) {
+        w.z -= G3_WAVE_SPEED;
+        w.age++;
+        for (const c of g3Cars) {
+            if (!c.dead && c.lane === w.lane && Math.abs(c.z - w.z) < 2.2) {
+                c.dead = true;
+                g3Dist += 3;
+                g3Burst(g3LaneX(c.lane), 0.8, c.z, c.color, 12, 0.3);
+                g3Burst(g3LaneX(c.lane), 0.8, c.z, [0.3, 1.0, 1.0], 6, 0.25);
+                SFX.destroy();
+            }
+        }
+        if (gameTime % 2 === 0) {
+            g3Burst(g3LaneX(w.lane) + (Math.random() - 0.5) * 1.5, 0.2, w.z, [0.3, 1.0, 1.0], 1, 0.1);
+        }
+    }
+    g3Waves = g3Waves.filter(w => w.z > G3_SPAWN_Z - 10);
 
     // Collisions
     for (const c of g3Cars) {
@@ -623,6 +661,13 @@ function render3D() {
         if (g3Invuln % 8 < 4) {
             g3Box(px, 1.1 + py, 0, 0.9, 1.6, 1.9, [1.0, 1.0, 1.0]);
         }
+    }
+
+    // Shockwaves: a glowing cyan wall racing down the lane
+    for (const w of g3Waves) {
+        const pulse = 0.8 + Math.sin(w.age * 0.5) * 0.3;
+        g3Box(g3LaneX(w.lane), 0.55, w.z, 1.9, 1.0 * pulse, 0.25, [0.3, 1.0, 1.0]);
+        g3Box(g3LaneX(w.lane), 0.5, w.z + 0.5, 1.5, 0.6 * pulse, 0.2, [0.7, 1.0, 1.0]);
     }
 
     // Particles

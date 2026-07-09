@@ -111,6 +111,40 @@ describe('collision', () => {
     expect(g3Cars[0].cleared).toBe(true);
   });
 
+  test('clearing a car fires a shockwave and speed boost', () => {
+    g3Player.y = G3_CAR_TOP + 0.5;
+    g3Player.onGround = false;
+    g3Player.vy = 0.1;
+    g3Cars = [{ lane: g3Player.lane, z: 0, fwd: 0.1, color: [1, 0, 0] }];
+    update3D();
+    expect(g3Waves.length).toBe(1);
+    expect(g3Waves[0].lane).toBe(g3Player.lane);
+    expect(g3ClearBoost).toBeGreaterThan(0);
+  });
+
+  test('shockwave destroys cars ahead in its lane', () => {
+    g3Waves = [{ lane: 2, z: -1, age: 0 }];
+    g3ClearBoost = 0;
+    g3Player.lane = 0; // out of the way
+    g3Player.x = -3;
+    g3Cars = [
+      { lane: 2, z: -30, fwd: 0.1, color: [1, 0, 0] },
+      { lane: 1, z: -30, fwd: 0.1, color: [0, 0, 1] }, // other lane — safe
+    ];
+    for (let i = 0; i < 120 && g3Cars.length > 1; i++) update3D();
+    expect(g3Cars.length).toBe(1);
+    expect(g3Cars[0].lane).toBe(1);
+  });
+
+  test('clear boost adds speed and expires', () => {
+    g3ClearBoost = 2;
+    update3D();
+    expect(g3Speed).toBeCloseTo(g3SpeedFor(g3Dist, g3Invuln) + G3_CLEAR_BOOST_SPD, 1);
+    update3D();
+    update3D();
+    expect(g3ClearBoost).toBe(0);
+  });
+
   test('fish can be jumped over', () => {
     const fish = { x: -1, z: 0, y: 0.2 };
     expect(g3HitFish({ lane: 1, x: -1, y: 0 }, fish)).toBe(true);
